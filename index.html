@@ -401,25 +401,26 @@
       '<div class="box"><h1>Limon Kasa · Bağlantı Ayarları</h1><p>Bu bilgileri bir kere yaz, cihaz hatırlar.</p>' +
       '<label>Supabase URL</label><input type="text" id="lsbUrl" autocomplete="off" autocapitalize="off" placeholder="https://xxxx.supabase.co" value="' + esc(cfg && cfg.url) + '">' +
       '<label>Anon Key</label><textarea id="lsbKey" autocomplete="off" autocapitalize="off" placeholder="eyJ... ya da sb_publishable_...">' + esc(cfg && cfg.key) + '</textarea>' +
-      '<label>E-posta</label><input type="email" id="lsbMail" autocomplete="username" autocapitalize="off" placeholder="kasa@limoncocuk.com">' +
+      '<label>Kullanıcı adı</label><input type="text" id="lsbMail" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="limon ya da kasa">' +
       '<label>Şifre</label><input type="password" id="lsbPass" autocomplete="current-password">' +
       '<div class="row"><input type="checkbox" id="lsbOwn"><label for="lsbOwn" style="margin:0;font-weight:600">Bu yönetici (sahip) hesabı</label></div>' +
       '<button id="lsbGo">Bağlan</button><div id="lsbMsg" class="msg"></div></div>';
     document.body.appendChild(ov);
-    if (DEFAULT_CFG && DEFAULT_CFG.url) { ['#lsbUrl','#lsbKey'].forEach(function (q) { var e = ov.querySelector(q); if (e) { e.style.display = 'none'; if (e.previousElementSibling) e.previousElementSibling.style.display = 'none'; } }); var h = ov.querySelector('p'); if (h) h.textContent = 'E-posta ve şifreni yaz, bir kere girince cihaz hatırlar.'; }
+    if (DEFAULT_CFG && DEFAULT_CFG.url) { ['#lsbUrl','#lsbKey'].forEach(function (q) { var e = ov.querySelector(q); if (e) { e.style.display = 'none'; if (e.previousElementSibling) e.previousElementSibling.style.display = 'none'; } }); var h = ov.querySelector('p'); if (h) h.textContent = 'Kullanıcı adı ve şifreni yaz, bir kere girince cihaz hatırlar.'; }
     if (note) msg('err', note);
     var go = ov.querySelector('#lsbGo');
     function run() {
       var url = ov.querySelector('#lsbUrl').value.trim().replace(/\/+$/, ''), key = ov.querySelector('#lsbKey').value.trim();
-      var mail = ov.querySelector('#lsbMail').value.trim(), pass = ov.querySelector('#lsbPass').value, own = ov.querySelector('#lsbOwn').checked;
+      var mail = ov.querySelector('#lsbMail').value.trim().toLowerCase(), pass = ov.querySelector('#lsbPass').value, own = ov.querySelector('#lsbOwn').checked;
       if (!/^https:\/\/.+\.supabase\.(co|in)$/i.test(url) && !/^https?:\/\/(localhost|127\.0\.0\.1)/.test(url)) { msg('err', 'Supabase URL şu şekilde olmalı: https://xxxx.supabase.co'); return; }
       if (key.length < 20) { msg('err', 'Anon Key çok kısa görünüyor, tamamını yapıştır.'); return; }
-      if (!mail || !pass) { msg('err', 'E-posta ve şifreyi yaz.'); return; }
+      if (!mail || !pass) { msg('err', 'Kullanıcı adı ve şifreyi yaz.'); return; }
+      if (mail.indexOf('@') < 0) mail = mail + '@limoncocuk.com';
       go.disabled = true; msg('inf', 'Bağlanılıyor…');
       connect({ url: url, key: key }, { email: mail, password: pass, owner: own }).then(function () { closeOv(); gear(); }, function (e) {
         go.disabled = false;
         var m = String((e && e.message) || e);
-        if (/Invalid login/i.test(m)) m = 'E-posta ya da şifre yanlış.';
+        if (/Invalid login/i.test(m)) m = 'Kullanıcı adı ya da şifre yanlış.';
         else if (/Failed to fetch|network/i.test(m)) m = 'Bağlanılamadı. İnternetini ve Supabase URL\'sini kontrol et.';
         msg('err', m);
       });
