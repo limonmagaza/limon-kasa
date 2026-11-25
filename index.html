@@ -501,7 +501,7 @@
     document.body.appendChild(ov);
     ov.querySelector('#lsbClose').addEventListener('click', closeOv);
     ov.querySelector('#lsbOut').addEventListener('click', async function () {
-      try { await sb.auth.signOut(); } catch (e) { }
+      try { await sb.auth.signOut({scope:'local'}); } catch (e) { }
       ls(OWN_K, null); location.reload();
     });
     var f = ov.querySelector('#lsbFile');
@@ -2388,10 +2388,32 @@ details.qhelp .notbox{margin-top:8px}
     );
   }
   // ---------- Barkod + Kasa ----------
+  // ---------- Türkiye saati (UTC+3, yaz saati yok): gün/hafta/ay sınırları cihaz saat dilimine bağlı olmasın ----------
+  var TR_OFF=10800000;
+  function trDay0(ts){ ts=(ts==null?Date.now():ts); return Math.floor((ts+TR_OFF)/86400000)*86400000-TR_OFF; }
+  function trWeek0(ts){ var d=trDay0(ts), dow=new Date(d+TR_OFF).getUTCDay(); return d-((dow+6)%7)*86400000; }
+  function trMonth0(ts){ var t=new Date((ts==null?Date.now():ts)+TR_OFF); return Date.UTC(t.getUTCFullYear(),t.getUTCMonth(),1)-TR_OFF; }
+  // ---------- Atomik sunucu işlemleri (stok düşme/ekleme, model no) ----------
+  async function rpc(name,args){
+    var sb=window.limonSupabase&&window.limonSupabase.sb; if(!sb){ var e0=new Error('nosb'); e0.rpcMissing=true; throw e0; }
+    var r=await sb.rpc(name,args||{});
+    if(r.error){ var e=new Error(r.error.message||'rpc'); e.code=r.error.code||''; e.rpcMissing=/PGRST202|42883|could not find the function|schema cache/i.test((r.error.code||'')+' '+(r.error.message||'')); throw e; }
+    return r.data;
+  }
+  async function stokEkle(id,size,d){
+    try{ await tmo(rpc('stok_ekle',{p_id:id,p_size:size,p_delta:d}),8000); }
+    catch(e){
+      if(!(e&&e.rpcMissing)) throw e;
+      var ref=db.doc('urunler/'+id), x=(await tmo(ref.get(),8000)).data(); if(!x) return;
+      var st=Object.assign({},x.stoklar||{}); st[size]=Math.max(0,(Number(st[size])||0)+d); await tmo(ref.update({stoklar:st}),8000);
+    }
+  }
   function pad(n,l){ var s=String(n); while(s.length<l) s='0'+s; return s; }
   // Barkod: 88 + model no (4 hane) + beden no (2 hane) = 8 rakam
   function barkod(modelNo,size){ var i=ALLSIZES.indexOf(size)+1; return '88'+pad(modelNo,4)+pad(i,2); }
   async function nextModelNo(){
+    try{ var nn=Number(await tmo(rpc('sayac_next',{}),8000)); if(nn>9999) throw new Error('Model numarası 9999\'u geçti'); if(nn>0) return nn; }
+    catch(e0){ if(!(e0&&e0.rpcMissing)) throw e0; }
     for(var deneme=0; deneme<5; deneme++){
       var r=await db.doc('sayac/model').get();
       var n=((r.exists && r.data() && Number(r.data().n))||0)+1;
@@ -2417,7 +2439,7 @@ details.qhelp .notbox{margin-top:8px}
       await db.doc('satislar/'+sid).delete();
       try{ await db.doc('kayit/g'+Date.now()).set({tur:'geri_al', docId:s.docId||'', modelNo:s.modelNo||0, beden:s.beden||'', fiyat:s.fiyat||0, odeme:s.odeme||'', t:Date.now()}); }catch(e2){}
       if(x && !s.uyari){
-        try{ var st=Object.assign({},x.stoklar||{}); st[s.beden]=(Number(st[s.beden])||0)+1; await ref.update({stoklar:st}); }
+        try{ await stokEkle(s.docId,s.beden,1); }
         catch(e6){ kshow('err','Satış silindi ama stok artırılamadı. Ürünün stoğunu elle kontrol et.'); return; }
       }
       kshow('ok','Satış geri alındı, stok iade edildi ✓');
@@ -2665,7 +2687,7 @@ details.qhelp .notbox{margin-top:8px}
       yU=s; if(yonSubs) yonSchedule(); try{ if(window.__lbl) window.__lbl(); }catch(eL){}
       if(scanEl.value) ksearch();
     }, function(e){ kshow('err','Ürün listesi yüklenemedi: '+((e&&(e.code||e.message))||'hata')); });
-    if(!kTodayUnsub){ var dt=new Date(); dt.setHours(0,0,0,0); kTodayUnsub=db.collection('satislar').where('t','>=',dt.getTime()).onSnapshot(function(s){ kToday=s; kRender(); }, function(){}); }
+    if(!kTodayUnsub){ var dt=new Date(trDay0()); kTodayUnsub=db.collection('satislar').where('t','>=',dt.getTime()).onSnapshot(function(s){ kToday=s; kRender(); }, function(){}); }
     try{ hdfStart(); }catch(eH2){}
     try{ tyStart(); }catch(eT2){}
     updPend(); flush();
@@ -2717,6 +2739,11 @@ details.qhelp .notbox{margin-top:8px}
         var q=queue[0], sref=db.doc('satislar/'+q.sid), ex=await tmo(sref.get(),8000);
         if(!ex.exists){
           if(!q.applied){
+            var rr=null;
+            try{ rr=await tmo(rpc('stok_dus',{p_id:q.docId,p_size:q.size,p_sid:q.sid}),8000); }
+            catch(er){ if(er&&er.code==='P0002'){ rr={dup:false,n:1,missing:true}; } else if(!(er&&er.rpcMissing)) throw er; }
+            if(rr){ q.applied=true; q.uyari=(!rr.dup && !rr.missing && Number(rr.n)<=0); qSave(); }
+            else {
             var ref=db.doc('urunler/'+q.docId), fr=await tmo(ref.get(),8000), x=fr.data();
             if(x && (x.sg||[]).indexOf(q.sid)>=0){ q.applied=true; qSave(); }   // stok daha önce düşülmüş, tekrar düşme
             else {
@@ -2725,6 +2752,7 @@ details.qhelp .notbox{margin-top:8px}
             if(x) await tmo(ref.update({stoklar:st, sg:((x.sg||[]).slice(-30)).concat(q.sid)}),8000);
             q.applied=true; q.uyari=(n<=0); qSave();
             if(x) verifyStock(q.docId,q.size,q.sid);
+            }
             }
           }
           await tmo(sref.set({docId:q.docId, modelNo:q.mn, barkod:q.code, beden:q.size, fiyat:q.fiyat, liste:(typeof q.liste==='number'?q.liste:q.fiyat), iskonto:(Number(q.iskonto)||0), renk:q.renk, cinsiyet:q.cinsiyet, odeme:q.odeme||'nakit', nakit:(typeof q.nakit==='number'?q.nakit:(q.odeme==='kart'?0:q.fiyat)), kart:(typeof q.kart==='number'?q.kart:(q.odeme==='kart'?q.fiyat:0)), kanal:'magaza', esit:false, uyari:!!q.uyari, satan:(q.satan||''), t:q.t}),8000);
@@ -2843,8 +2871,7 @@ details.qhelp .notbox{margin-top:8px}
     try{
       var ref=db.doc('urunler/'+c.id), fr=await tmo(ref.get(),8000), fx=fr.data();
       if(!fx){ beep(false); kshow('err','Ürün bulunamadı.'); return; }
-      var st=Object.assign({},fx.stoklar||{}); st[size]=(Number(st[size])||0)+1;
-      await tmo(ref.update({stoklar:st}),8000);
+      await stokEkle(c.id,size,1);
       var f=Number(x.fiyat)||0;
       await tmo(db.doc('satislar/i'+Date.now()+'-'+Math.floor(Math.random()*1000)).set({docId:c.id, modelNo:mn, barkod:code, beden:size, fiyat:-f, renk:x.renk||'', cinsiyet:x.cinsiyet||'', odeme:pay, nakit:(pay==='kart'?0:-f), kart:(pay==='kart'?-f:0), kanal:'magaza', iade:true, esit:false, satan:curName(), t:Date.now()}),8000);
       beep(true);
@@ -2919,7 +2946,7 @@ details.qhelp .notbox{margin-top:8px}
   $('kcam').addEventListener('click',camStart);
   $('camStop').addEventListener('click',camStop);
   var ksugEl=$('ksug');
-  function nrm(v){ return String(v==null?'':v).toLocaleLowerCase('tr-TR'); }
+  function nrm(v){ return String(v==null?'':v).toLocaleLowerCase('tr-TR').replace(/ç/g,'c').replace(/ğ/g,'g').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ş/g,'s').replace(/ü/g,'u').replace(/â/g,'a'); }
   function ksearch(){
     var q=scanEl.value.trim();
     if(!q || (/^\d+$/.test(q) && q.length>4)){ ksugEl.innerHTML=''; return; }
@@ -2945,7 +2972,7 @@ details.qhelp .notbox{margin-top:8px}
   });
   var kDay={tot:0,cnt:0,tn:0,tk:0}, riDone={};
   function kRender(){
-    var d0=new Date(); d0.setHours(0,0,0,0);
+    var d0=new Date(trDay0());
     var tot=0, cnt=0, rows=[], qrows=[], tn=0, tk=0, ids={};
     function row(s,label,btn){
       var saat=new Date(s.t).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
@@ -3290,9 +3317,11 @@ details.qhelp .notbox{margin-top:8px}
       if(!s){ beep(false); kshow('err','Satış bulunamadı.'); return; }
       if(s.iade || s.iadeEdildi){ beep(false); kshow('err','Bu satış zaten iade edilmiş.'); riDone[sid]=1; kRender(); return; }
       var ref=db.doc('urunler/'+s.docId), fr=await tmo(ref.get(),8000), fx=fr.data();
-      if(fx){ var st=Object.assign({},fx.stoklar||{}); st[s.beden]=(Number(st[s.beden])||0)+1; await tmo(ref.update({stoklar:st}),8000); }
       var f=Number(s.fiyat)||0, pp=payParts(s);
-      await tmo(db.doc('satislar/i'+Date.now()+'-'+Math.floor(Math.random()*1000)).set({docId:s.docId||'', modelNo:s.modelNo||0, barkod:s.barkod||'', beden:s.beden||'', fiyat:-f, renk:s.renk||'', cinsiyet:s.cinsiyet||'', odeme:s.odeme||'nakit', nakit:-pp[0], kart:-pp[1], kanal:'magaza', iade:true, esit:false, kaynak:sid, satan:curName(), t:Date.now()}),8000);
+      var iex=await tmo(db.doc('satislar/i'+sid).get(),8000);
+      if(iex.exists){ try{ await tmo(db.doc('satislar/'+sid).update({iadeEdildi:true}),8000); }catch(eU0){} riDone[sid]=1; beep(false); kshow('err','Bu satışın iadesi zaten alınmış.'); kRender(); return; }
+      await tmo(db.doc('satislar/i'+sid).set({docId:s.docId||'', modelNo:s.modelNo||0, barkod:s.barkod||'', beden:s.beden||'', fiyat:-f, renk:s.renk||'', cinsiyet:s.cinsiyet||'', odeme:s.odeme||'nakit', nakit:-pp[0], kart:-pp[1], kanal:'magaza', iade:true, esit:false, kaynak:sid, satan:curName(), t:Date.now()}),8000);
+      if(fx){ try{ await stokEkle(s.docId,s.beden,1); }catch(eS){ kshow('err','İade kaydedildi ama stok artırılamadı. Ürünün stoğunu elle kontrol et.'); } }
       riDone[sid]=1;
       try{ await tmo(db.doc('satislar/'+sid).update({iadeEdildi:true}),8000); }catch(eU){}
       beep(true); kRender();
@@ -3330,7 +3359,7 @@ details.qhelp .notbox{margin-top:8px}
     if(!db) return;
     gsBusy=true; gsRender();
     try{
-      var d0=new Date(); d0.setHours(0,0,0,0);
+      var d0=new Date(trDay0());
       var sn=await tmo(readOnce(db.collection('gider').where('t','>=',d0.getTime())),10000), gg=0, kk=0;
       sn.docs.forEach(function(d){ var x=d.data()||{}, v=Number(x.tutar)||0; if(x.grup==='k') kk+=v; else gg+=v; });
       gsGider={g:r2(gg),k:r2(kk)};
@@ -3416,12 +3445,14 @@ details.qhelp .notbox{margin-top:8px}
   }
   var rapPer='gun', rapOff=0, rapPart='ciro', rap={unsubs:[],leaves:{},pending:{},err:false,tmr:null,gen:0};
   function rapRange(){
-    var now=new Date(), a, b, lbl, e;
-    if(rapPer==='gun'){ a=new Date(now.getFullYear(),now.getMonth(),now.getDate()+rapOff); b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+1); lbl=a.toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'}); }
-    else if(rapPer==='hafta'){ var dow=(now.getDay()+6)%7; a=new Date(now.getFullYear(),now.getMonth(),now.getDate()-dow+7*rapOff); b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+7); e=new Date(b.getFullYear(),b.getMonth(),b.getDate()-1); lbl=a.toLocaleDateString('tr-TR',{day:'numeric',month:'long'})+' – '+e.toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'}); }
-    else if(rapPer==='ay'){ a=new Date(now.getFullYear(),now.getMonth()+rapOff,1); b=new Date(a.getFullYear(),a.getMonth()+1,1); lbl=a.toLocaleDateString('tr-TR',{month:'long',year:'numeric'}); }
-    else { a=new Date(now.getFullYear()+rapOff,0,1); b=new Date(a.getFullYear()+1,0,1); lbl=String(a.getFullYear()); }
-    return {a:a.getTime(), b:b.getTime(), lbl:lbl};
+    var T=TR_OFF, nt=new Date(Date.now()+T), Y=nt.getUTCFullYear(), M=nt.getUTCMonth(), D=nt.getUTCDate(), a, b, lbl, e;
+    function ts(y,m,d){ return Date.UTC(y,m,d)-T; }
+    function fm(t,o){ return new Date(t).toLocaleDateString('tr-TR',Object.assign({timeZone:'Europe/Istanbul'},o)); }
+    if(rapPer==='gun'){ a=ts(Y,M,D+rapOff); b=ts(Y,M,D+rapOff+1); lbl=fm(a,{day:'numeric',month:'long',year:'numeric'}); }
+    else if(rapPer==='hafta'){ var dow=(nt.getUTCDay()+6)%7; a=ts(Y,M,D-dow+7*rapOff); b=ts(Y,M,D-dow+7*rapOff+7); e=b-86400000; lbl=fm(a,{day:'numeric',month:'long'})+' – '+fm(e,{day:'numeric',month:'long',year:'numeric'}); }
+    else if(rapPer==='ay'){ a=ts(Y,M+rapOff,1); b=ts(Y,M+rapOff+1,1); lbl=fm(a,{month:'long',year:'numeric'}); }
+    else { a=ts(Y+rapOff,0,1); b=ts(Y+rapOff+1,0,1); lbl=String(Y+rapOff); }
+    return {a:a, b:b, lbl:lbl};
   }
   function rapStop(){ rap.unsubs.forEach(function(f){ try{ f(); }catch(e){} }); rap.unsubs=[]; rap.leaves={}; rap.pending={}; rap.err=false; }
   function rapSchedule(){ if(rap.tmr) return; rap.tmr=setTimeout(function(){ rap.tmr=null; rapRender(); },80); }
@@ -3531,7 +3562,7 @@ details.qhelp .notbox{margin-top:8px}
   $('rapPrev').addEventListener('click',function(){ rapOff--; rapStart(); });
   $('rapNext').addEventListener('click',function(){ if(rapOff<0){ rapOff++; rapStart(); } });
   var yS=null, yU=null, yA=null, yK=null, yonSubs=false, yonTimer=null;
-  function yonLo(){ var n=new Date(), d0=new Date(n); d0.setHours(0,0,0,0); var wk=new Date(d0); wk.setDate(wk.getDate()-((wk.getDay()+6)%7)); return Math.min(new Date(n.getFullYear(),n.getMonth(),1).getTime(),wk.getTime()); }
+  function yonLo(){ return Math.min(trMonth0(),trWeek0()); }
   function yonSchedule(){ if(yonTimer) return; yonTimer=setTimeout(function(){ yonTimer=null; yonCompute(); },80); }
   function yonErr(){ $('yonInfo').textContent='Yüklenemedi, tekrar dene.'; }
   function yonCompute(){
@@ -3542,9 +3573,9 @@ details.qhelp .notbox{margin-top:8px}
     try{
       alisMap={}; alisRaw={}; yA.docs.forEach(function(d){ var v=Number((d.data()||{}).v)||0; alisRaw[d.id]=v; alisMap[d.id]=v; });
       yonDocs=yU.docs;
-      var now=new Date(), d0=new Date(now); d0.setHours(0,0,0,0);
-      var wk=new Date(d0); wk.setDate(wk.getDate()-((wk.getDay()+6)%7));
-      var mo=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+      var d0=new Date(trDay0());
+      var wk=new Date(trWeek0());
+      var mo=trMonth0();
       var per={bugun:[0,0,0],hafta:[0,0,0],ay:[0,0,0]}, eksikS=0;
       yS.docs.forEach(function(d){
         var x=d.data()||{}; var lo=Math.min(mo,wk.getTime()); if(!(x.t>=lo)) return;
@@ -4213,18 +4244,18 @@ details.qhelp .notbox{margin-top:8px}
   function gdGrup(t){ for(var i=0;i<GD_TUR.length;i++) if(GD_TUR[i][0]===t) return GD_TUR[i][1]; return 'g'; }
   $('gdTur').addEventListener('click',function(ev){ var b=ev.target.closest&&ev.target.closest('[data-gt]'); if(!b) return; gdSel=b.getAttribute('data-gt'); gdChips(); });
   function gdRender(){
-    var tot=0;
-    $('gdList').innerHTML=gdDocs.length?gdDocs.map(function(d){
+    var tot=0, g0=trDay0(), gdD=gdDocs.filter(function(d){ return (Number((d.data()||{}).t)||0)>=g0; });
+    $('gdList').innerHTML=gdD.length?gdD.map(function(d){
       var x=d.data()||{}; tot+=Number(x.tutar)||0;
       var saat=new Date(x.t).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
       var mine=(isOwner || (cur && x.kim===cur.ad));
       return '<div class="item"><div class="itop"><div class="meta"><b>'+esc(x.tutar)+' ₺</b> · '+esc(x.tur)+(x.not?' · '+esc(x.not):'')+'<br><span class="tag">'+esc(x.kim||'')+' · '+saat+'</span></div>'+(mine?'<button type="button" class="mini danger" data-gdel="'+esc(d.id)+'">Sil</button>':'')+'</div></div>';
     }).join(''):'<div class="empty">Bugün gider yok.</div>';
-    $('gdTop').textContent=gdDocs.length?('· toplam '+Math.round(tot)+' ₺'):'';
+    $('gdTop').textContent=gdD.length?('· toplam '+Math.round(tot)+' ₺'):'';
   }
   function gdStart(){
     gdTabUpd(); gdChips(); if(gdUnsub||!db) { gdRender(); return; }
-    var d0=new Date(); d0.setHours(0,0,0,0);
+    var d0=new Date(trDay0());
     gdUnsub=db.collection('gider').where('t','>=',d0.getTime()).orderBy('t','desc').onSnapshot(function(sn){ gdDocs=sn.docs; gdRender(); }, function(){ gdUnsub=null; gdMsg('err','Liste yüklenemedi, sekmeyi yenile.'); });
   }
   $('gdSave').addEventListener('click',async function(){
