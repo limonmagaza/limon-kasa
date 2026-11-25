@@ -305,6 +305,67 @@
     };
   }
 
+
+  // Eski "/_blob/<id>" adreslerini Supabase'deki 'resimler' kayitlarindan sun (img, Image(), fetch)
+  var BLOBC = {}, BLOBP = {}, blobFixOn = false;
+  function blobData(id) {
+    if (BLOBC[id]) return Promise.resolve(BLOBC[id]);
+    if (BLOBP[id]) return BLOBP[id];
+    BLOBP[id] = DB.doc('resimler/' + id).get().then(function (r) {
+      var x = r && r.data && r.data(); var d = x && x.d;
+      if (d) BLOBC[id] = d; delete BLOBP[id]; return d || null;
+    }, function () { delete BLOBP[id]; return null; });
+    return BLOBP[id];
+  }
+  function blobId(u) {
+    var m = String(u || '').match(/^(?:https?:\/\/[^\/]+)?\/_blob\/([^?#]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function installBlobFix() {
+    if (blobFixOn) return; blobFixOn = true;
+    try {
+      var ofetch = root.fetch.bind(root);
+      root.fetch = function (u, o) {
+        var id = blobId(typeof u === 'string' ? u : (u && u.url));
+        if (!id) return ofetch(u, o);
+        return blobData(id).then(function (d) { return d ? ofetch(d) : new Response('', { status: 404 }); });
+      };
+    } catch (e) {}
+    try {
+      var desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        configurable: true, enumerable: desc.enumerable, get: desc.get,
+        set: function (v) {
+          var id = blobId(v), img = this;
+          if (!id) { desc.set.call(img, v); return; }
+          if (BLOBC[id]) { desc.set.call(img, BLOBC[id]); return; }
+          blobData(id).then(function (d) { if (d) desc.set.call(img, d); });
+        }
+      });
+    } catch (e) {}
+    function fix(img) {
+      var id = blobId(img.getAttribute('src'));
+      if (!id) return;
+      if (BLOBC[id]) { img.setAttribute('src', BLOBC[id]); return; }
+      blobData(id).then(function (d) { if (d && blobId(img.getAttribute('src')) === id) img.setAttribute('src', d); });
+    }
+    function scan(n) {
+      if (n.nodeType !== 1) return;
+      if (n.tagName === 'IMG') fix(n);
+      var l = n.querySelectorAll ? n.querySelectorAll('img') : [];
+      for (var i = 0; i < l.length; i++) fix(l[i]);
+    }
+    try {
+      new MutationObserver(function (ms) {
+        ms.forEach(function (m) {
+          if (m.type === 'attributes') { if (m.target.tagName === 'IMG') fix(m.target); }
+          else for (var i = 0; i < m.addedNodes.length; i++) scan(m.addedNodes[i]);
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+      scan(document.documentElement);
+    } catch (e) {}
+  }
+
   function blobToDataURL(b) {
     return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; r.readAsDataURL(b); });
   }
@@ -345,6 +406,7 @@
     ls(CFG_K, JSON.stringify(cfg)); cfgNow = cfg;
     core = makeCore(sb, env);
     DB = core.db;
+    installBlobFix();
     ASSETS = {
       upload: async function (blob) {
         var d = await blobToDataURL(blob), id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
