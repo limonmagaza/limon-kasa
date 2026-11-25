@@ -314,6 +314,7 @@
   // =====================================================================
   //  Tarayici: Baglanti Ayarlari ekrani + claude.use(...)
   // =====================================================================
+  var DEFAULT_CFG = {url:'https://oemzrduwgfjndllgfucp.supabase.co',key:'sb_publishable_KduMRPWOWHkNBpvIMJGZuQ_5kP05XkF'};
   var CFG_K = 'limon-sb-cfg', OWN_K = 'limon-sb-owner', AUTH_K = 'limon-sb-auth';
   var sb = null, owner = false, core = null, userEmail = '', cfgNow = null;
   var readyRes, readyRej, readyP = new Promise(function (a, b) { readyRes = a; readyRej = b; });
@@ -405,6 +406,7 @@
       '<div class="row"><input type="checkbox" id="lsbOwn"><label for="lsbOwn" style="margin:0;font-weight:600">Bu yönetici (sahip) hesabı</label></div>' +
       '<button id="lsbGo">Bağlan</button><div id="lsbMsg" class="msg"></div></div>';
     document.body.appendChild(ov);
+    if (DEFAULT_CFG && DEFAULT_CFG.url) { ['#lsbUrl','#lsbKey'].forEach(function (q) { var e = ov.querySelector(q); if (e) { e.style.display = 'none'; if (e.previousElementSibling) e.previousElementSibling.style.display = 'none'; } }); var h = ov.querySelector('p'); if (h) h.textContent = 'E-posta ve şifreni yaz, bir kere girince cihaz hatırlar.'; }
     if (note) msg('err', note);
     var go = ov.querySelector('#lsbGo');
     function run() {
@@ -478,12 +480,13 @@
 
   function boot() {
     var cfg = null; try { cfg = JSON.parse(ls(CFG_K) || 'null'); } catch (e) { }
+    if (DEFAULT_CFG && DEFAULT_CFG.url && DEFAULT_CFG.key) cfg = DEFAULT_CFG;
     if (cfg && cfg.url && cfg.key) {
       connect(cfg, null).then(function () { gear(); }, function (e) {
         var m = String((e && e.message) || e);
         showForm(cfg, /Giris gerekli/i.test(m) ? '' : (/Failed to fetch|network/i.test(m) ? 'Bağlanılamadı. İnternetini kontrol edip sayfayı yenile.' : m));
       });
-    } else showForm();
+    } else showForm(cfg);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : globalThis);
