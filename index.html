@@ -3614,13 +3614,33 @@ details.qhelp .notbox{margin-top:8px}
     gsBusy=false; gsRender();
   }
   $('tabGunSonu').addEventListener('click',function(){ setTab('gunsonu'); });
+  var gsOz=null;
   $('gsKapat').addEventListener('click', async function(){
     var m=$('gsKapMsg'); if(!db || !(isOwner || (cur && cur.gunsonu))){ m.textContent='Bu işlem sadece yetkili içindir.'; return; }
-    if(this.getAttribute('data-arm')!=='1'){ var bb=this; bb.setAttribute('data-arm','1'); bb.textContent='Emin misin? Gün sonunu kaydet'; setTimeout(function(){ try{ bb.removeAttribute('data-arm'); bb.textContent='✓ Gün sonu yapıldı (Son satışlar listesini temizle)'; }catch(e){} },4000); return; }
-    this.removeAttribute('data-arm'); this.textContent='✓ Gün sonu yapıldı (Son satışlar listesini temizle)'; this.disabled=true;
-    try{ var tt=Date.now(); await tmo(db.doc('kayit/gunsonu').set({tur:'gun_sonu', t:tt, kim:curName()||'Yönetici'}),8000); kGsT=tt; m.style.color='var(--ok)'; m.textContent='✓ Gün sonu kaydedildi. Son satışlar listesi temizlendi.'; try{ kRender(); }catch(e1){} }
-    catch(e){ m.style.color='var(--err)'; m.textContent='Kaydedilemedi'+(e&&e.code?' ('+e.code+')':'')+'. Tekrar dene.'; }
+    var now=Date.now(), bas=(kGsT>0 && kGsT>now-48*3600000) ? kGsT : (new Date(now).getHours()<6 ? trDay0(now)-86400000 : trDay0(now));
+    var gunAd=new Date(now-6*3600000).toLocaleDateString('tr-TR',{weekday:'long', day:'numeric', month:'long'});
+    this.disabled=true; m.style.color=''; m.textContent='Hesaplanıyor…';
+    try{
+      var sn=await tmo(readOnce(db.collection('satislar').where('t','>=',bas)),10000), tn=0, tk=0, adet=0;
+      sn.docs.forEach(function(d){ var x=d.data()||{}; if((Number(x.t)||0)>now) return; var pp=payParts(x); tn+=pp[0]; tk+=pp[1]; adet+=(x.iade?-1:1); });
+      tn=r2(tn); tk=r2(tk); gsOz={t:now, bas:bas, gun:gunAd, nakit:tn, kart:tk, adet:adet};
+      m.innerHTML='<div class="card" style="margin:8px 0 0;border:2px solid var(--lemon-d)"><b>'+esc(gunAd)+' gün sonu</b>'+
+        '<div class="srow" style="justify-content:space-between;padding:6px 0"><span>💵 Kasada nakit satış</span><b>'+money(tn)+'</b></div>'+
+        '<div class="srow" style="justify-content:space-between;padding:6px 0"><span>💳 Kartlı satış</span><b>'+money(tk)+'</b></div>'+
+        '<div class="srow" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span>🧾 Toplam ('+adet+' adet)</span><b>'+money(r2(tn+tk))+'</b></div>'+
+        '<div class="tip" style="text-align:left;margin:6px 0">Bu rakamlar doğru mu? Doğruysa gün kapanır, Son satışlar listesi temizlenir.</div>'+
+        '<div style="display:flex;gap:8px"><button type="button" class="mini" id="gsKapNo" style="flex:1">Vazgeç</button><button type="button" class="mini main" id="gsKapYes" style="flex:2">✓ Doğru, günü kapat</button></div></div>';
+    }catch(e){ m.style.color='var(--err)'; m.textContent='Satışlar okunamadı, interneti kontrol edip tekrar dene.'; gsOz=null; }
     finally{ this.disabled=false; }
+  });
+  $('gsKapMsg').addEventListener('click', async function(ev){
+    var m=$('gsKapMsg'), no=ev.target.closest&&ev.target.closest('#gsKapNo'), yes=ev.target.closest&&ev.target.closest('#gsKapYes');
+    if(no){ gsOz=null; m.innerHTML=''; return; }
+    if(!yes || !gsOz) return;
+    yes.disabled=true;
+    try{ var o=gsOz; await tmo(db.doc('kayit/gunsonu').set({tur:'gun_sonu', t:o.t, bas:o.bas, gun:o.gun, nakit:o.nakit, kart:o.kart, adet:o.adet, kim:curName()||'Yönetici'}),8000);
+      kGsT=o.t; gsOz=null; m.style.color='var(--ok)'; m.textContent='✓ '+o.gun+' gün sonu kapandı. Son satışlar listesi temizlendi.'; try{ kRender(); }catch(e1){} }
+    catch(e){ yes.disabled=false; m.insertAdjacentHTML('beforeend','<div class="msg show err">Kaydedilemedi'+(e&&e.code?' ('+esc(e.code)+')':'')+'. Tekrar dene.</div>'); }
   });
   function gsOpen(){
     var b=$('gsBox');
@@ -4843,7 +4863,7 @@ details.qhelp .notbox{margin-top:8px}
       return '<div class="item"><div class="meta"><b>'+esc(x.ad||d.id)+'</b> · '+esc(d.id)+(off?' <span class="tag">Kapalı</span>':'')+'</div>'+
         '<div class="btns" style="margin-top:8px"><input class="inp" style="flex:2;padding:10px;font-size:16px" type="text" autocomplete="off" autocapitalize="none" placeholder="Yeni şifre" data-pw="'+esc(d.id)+'">'+
         '<button type="button" class="mini main" data-ppw="'+esc(d.id)+'">Şifre değiştir</button>'+
-        '<button type="button" class="mini'+(off?'':' danger')+'" data-ptg="'+esc(d.id)+'">'+(off?'Aç':'Kapat')+'</button></div>'+
+        '<button type="button" class="mini'+(off?'':' danger')+'" data-ptg="'+esc(d.id)+'">'+(off?'Aç':'Kapat')+'</button><button type="button" class="mini danger" data-pdel="'+esc(d.id)+'">Sil</button></div>'+
         '<div class="btns" style="margin-top:8px"><button type="button" class="mini'+(x.gider===true?' main':'')+'" data-pgd="'+esc(d.id)+'">💸 Gider girebilir: '+(x.gider===true?'EVET':'hayır')+'</button> <button type="button" class="mini'+(x.urun===true?' main':'')+'" data-pur="'+esc(d.id)+'">🗂️ Stok adedi düzeltebilir: '+(x.urun===true?'EVET':'hayır')+'</button> <button type="button" class="mini'+(x.gunsonu===true?' main':'')+'" data-pgs="'+esc(d.id)+'">Gün sonu kapatabilir: '+(x.gunsonu===true?'EVET':'hayır')+'</button></div></div>';
     }).join('');
   }
@@ -4866,6 +4886,14 @@ details.qhelp .notbox{margin-top:8px}
       pMsg('Eklendi ✓ '+ad+' kullanıcı adı: '+u+' · şifreyi ona söyle.');
     }catch(e){ pMsg('Kaydedilemedi'+(e&&e.code?' ('+e.code+')':'')+'. Tekrar dene.'); }
     finally{ this.disabled=false; }
+  });
+  $('pList').addEventListener('click',async function(ev){
+    var bd=ev.target.closest&&ev.target.closest('[data-pdel]'); if(!bd || !isOwner) return;
+    var idd=bd.getAttribute('data-pdel');
+    if(bd.getAttribute('data-arm')!=='1'){ bd.setAttribute('data-arm','1'); bd.textContent='Emin misin? Sil'; setTimeout(function(){ try{ bd.removeAttribute('data-arm'); bd.textContent='Sil'; }catch(e){} },4000); return; }
+    bd.disabled=true;
+    try{ await tmo(db.doc('personel/'+idd).delete(),8000); pMsg('Silindi ✓ '+idd+' artık listede yok ve bu kullanıcı adıyla giriş yapılamaz.'); }
+    catch(e){ pMsg('Silinemedi'+(e&&e.code?' ('+e.code+')':'')+'. Tekrar dene.'); bd.disabled=false; }
   });
   $('pList').addEventListener('click',async function(ev){
     var b=ev.target.closest&&ev.target.closest('[data-ppw],[data-ptg],[data-pgd],[data-pur],[data-pgs]'); if(!b || !isOwner) return;
