@@ -4743,9 +4743,20 @@ details.qhelp .notbox{margin-top:8px}
     $('lgBtn').disabled=true;
     try{
       var d=await tmo(db.doc('personel/'+u).get(),10000), x=d.exists?d.data():null, ok=false;
-      if(!x && window.limonSupabase && window.limonSupabase.ownerLogin){ var own=false; try{ own=await tmo(window.limonSupabase.ownerLogin(u,p),15000); }catch(eO){ own=false; } if(own){ lgShow('ok','Yönetici girişi yapılıyor…'); return; } lgFail(); return; }
+      if((!x || u==='limon') && window.limonSupabase && window.limonSupabase.ownerLogin){
+        var own=false, oErr='';
+        try{ own=await tmo(window.limonSupabase.ownerLogin(u,p),15000); }catch(eO){ oErr=String((eO&&eO.message)||eO||''); }
+        if(own){ lgShow('ok','Yönetici girişi yapılıyor…'); return; }
+        if(u==='limon' || !x){
+          lgFails++; if(lgFails>=5){ lgFails=0; lgLockT=Date.now()+30000; }
+          if(/invalid login|credentials/i.test(oErr)) lgShow('err','Yönetici şifresi yanlış (limon hesabı).');
+          else if(oErr) lgShow('err','Yönetici girişi yapılamadı: '+oErr.slice(0,120));
+          else lgShow('err','Bu hesap yönetici değil.');
+          if(!x) return;
+        }
+      }
       if(x && x.aktif!==false && x.salt && x.h){ ok=((await sha(x.salt+':'+p))===x.h); }
-      if(!ok){ lgFail(); return; }
+      if(!ok){ if(u!=='limon') lgFail(); return; }
       cur={u:u,ad:x.ad||u,gider:x.gider===true,urun:x.urun===true,gunsonu:x.gunsonu===true};
       try{ localStorage.setItem(SESS_K,JSON.stringify({u:u,h:x.h,ad:cur.ad,exp:Date.now()+SESS_MS})); }catch(e2){}
       lgFails=0; $('lgPass').value=''; $('lgMsg').className='msg'; loginClose(); try{ kRender(); }catch(e3){}
