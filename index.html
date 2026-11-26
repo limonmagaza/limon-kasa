@@ -1031,6 +1031,18 @@ details.qhelp .notbox{margin-top:8px}
       <button class="btn" id="kcam" type="button" hidden style="background:var(--ink);color:#fff">📷 Kamerayla oku</button>
       <div id="camBox" hidden style="margin:10px 0"><div class="scanwrap"><video id="camVid" playsinline muted style="width:100%;border-radius:14px;background:#000"></video><div class="scanframe"></div><div class="scanline"></div></div><button type="button" class="mini" id="camStop" style="margin-top:8px">Kamerayı kapat</button></div>
       <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" id="sbBtn">🔍 Stok Bak</button></div>
+    <div class="card" id="cartCard" hidden style="margin-top:10px">
+      <h2 style="margin:0 0 8px">Sepet</h2>
+      <div id="cartList"></div>
+      <div id="cartTot" style="font-size:24px;font-weight:800;margin:10px 0 4px"></div>
+      <div class="tip" id="discInfo" style="text-align:left;margin:0 0 10px"></div>
+      <div class="klinks"><button type="button" class="mini" id="discBtn">🏷️ İskonto</button><button type="button" class="mini" id="parcaBtn">🔀 Parçalı ödeme</button></div>
+      <div id="discBox" hidden style="margin-bottom:14px"><div style="display:flex;gap:8px;margin-bottom:8px"><button type="button" class="chip on" data-dm="yuzde" style="flex:1">% Yüzde</button><button type="button" class="chip" data-dm="tutar" style="flex:1">₺ Tutar</button></div><input class="inp" id="discV" type="text" inputmode="decimal" autocomplete="off" placeholder="Örn: 10"><div class="tip" id="discMsg" style="text-align:left;margin-top:6px"></div></div>
+      <div id="splitBox" hidden style="margin-bottom:14px"><div style="display:flex;gap:10px"><div style="flex:1"><label class="fl" for="splitN" style="margin-top:0">💵 Nakit ₺</label><input class="inp" id="splitN" type="text" inputmode="decimal" autocomplete="off"></div><div style="flex:1"><label class="fl" for="splitK" style="margin-top:0">💳 Kart ₺</label><input class="inp" id="splitK" type="text" inputmode="decimal" autocomplete="off"></div></div><div class="tip" id="splitMsg" style="text-align:left;margin-top:8px"></div></div>
+      <div class="sellrow" id="sellRow"><button class="btn" id="sellNakit" type="button">💵 Nakit Sat</button><button class="btn" id="sellKart" type="button">💳 Kartla Sat</button></div>
+      <button class="btn" id="cartDone" type="button" hidden style="margin-top:0">🔀 Parçalı Sat</button>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="mini" id="cartPark" type="button">⏸ Beklet</button><button class="mini danger" id="cartClr" type="button">Sepeti boşalt</button></div>
+    </div>
       <details class="kmore" id="kMore"><summary>⚙️ Diğer (İade) ▾</summary><div class="kmorein">
         <button type="button" class="chip" id="fisBtn">🧾 Fiş yazdır: KAPALI (bu cihaz)</button>
         <button type="button" class="chip" id="iadeBtn">↩ İade al (kapalı)</button>
@@ -1043,18 +1055,6 @@ details.qhelp .notbox{margin-top:8px}
       <div class="msg" id="kmsg"></div>
       <div id="ksug"></div>
       <div id="sbBox" hidden></div>
-    </div>
-    <div class="card" id="cartCard" hidden style="margin-top:14px">
-      <h2 style="margin:0 0 8px">Sepet</h2>
-      <div id="cartList"></div>
-      <div id="cartTot" style="font-size:24px;font-weight:800;margin:10px 0 4px"></div>
-      <div class="tip" id="discInfo" style="text-align:left;margin:0 0 10px"></div>
-      <div class="klinks"><button type="button" class="mini" id="discBtn">🏷️ İskonto</button><button type="button" class="mini" id="parcaBtn">🔀 Parçalı ödeme</button></div>
-      <div id="discBox" hidden style="margin-bottom:14px"><div style="display:flex;gap:8px;margin-bottom:8px"><button type="button" class="chip on" data-dm="yuzde" style="flex:1">% Yüzde</button><button type="button" class="chip" data-dm="tutar" style="flex:1">₺ Tutar</button></div><input class="inp" id="discV" type="text" inputmode="decimal" autocomplete="off" placeholder="Örn: 10"><div class="tip" id="discMsg" style="text-align:left;margin-top:6px"></div></div>
-      <div id="splitBox" hidden style="margin-bottom:14px"><div style="display:flex;gap:10px"><div style="flex:1"><label class="fl" for="splitN" style="margin-top:0">💵 Nakit ₺</label><input class="inp" id="splitN" type="text" inputmode="decimal" autocomplete="off"></div><div style="flex:1"><label class="fl" for="splitK" style="margin-top:0">💳 Kart ₺</label><input class="inp" id="splitK" type="text" inputmode="decimal" autocomplete="off"></div></div><div class="tip" id="splitMsg" style="text-align:left;margin-top:8px"></div></div>
-      <div class="sellrow" id="sellRow"><button class="btn" id="sellNakit" type="button">💵 Nakit Sat</button><button class="btn" id="sellKart" type="button">💳 Kartla Sat</button></div>
-      <button class="btn" id="cartDone" type="button" hidden style="margin-top:0">🔀 Parçalı Sat</button>
-      <div style="display:flex;gap:8px;margin-top:10px"><button class="mini" id="cartPark" type="button">⏸ Beklet</button><button class="mini danger" id="cartClr" type="button">Sepeti boşalt</button></div>
     </div>
     <h2 id="kHead" style="display:none">Son satışlar <small id="ktop" style="font-weight:400;color:var(--mute)"></small></h2>
     <div class="list" id="klist" style="display:none"><div class="empty">Henüz satış yok.</div></div>
@@ -2861,7 +2861,7 @@ details.qhelp .notbox{margin-top:8px}
     L.sort(function(a,b){ return String(a.renk||'').localeCompare(String(b.renk||''),'tr'); });
     if(!L.length){ box.hidden=true; inn.innerHTML=''; return; }
     var h=L.map(function(x){ var st=Number(x.stoklar&&x.stoklar['Tek'])||0;
-      return '<button type="button" class="chip" data-hzk="'+esc(barkod(x.modelNo,'Tek'))+'" style="flex-direction:column;align-items:flex-start;padding:10px 14px'+(st>0?'':';opacity:.5')+'"><b>'+esc(x.renk||'Ürün')+'</b><small>'+esc(x.fiyat||0)+' ₺ · stok '+st+'</small></button>'; }).join('');
+      return '<button type="button" class="chip" data-hzk="'+esc(barkod(x.modelNo,'Tek'))+'" style="display:flex;flex-direction:column;align-items:flex-start;padding:10px 14px'+(st>0?'':';opacity:.5')+'"><b>'+esc(x.renk||'Ürün')+'</b><small>'+esc(x.fiyat||0)+' ₺ · stok '+st+'</small></button>'; }).join('');
     if(inn.getAttribute('data-h')!==h){ inn.innerHTML=h; inn.setAttribute('data-h',h); }
     box.hidden=false;
   }
