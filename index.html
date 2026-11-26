@@ -114,7 +114,64 @@
       };
     }
 
+    // ---------- Cihaz hafızası (IndexedDB): internet yokken son bilinen veri ----------
+    var IDBP = null, lastPut = {}, wq = 0, QUEUEABLE = ['sayim'];
+    function idb() {
+      if (IDBP) return IDBP;
+      IDBP = new Promise(function (res) {
+        try {
+          if (typeof indexedDB === 'undefined') { res(null); return; }
+          var r = indexedDB.open('limon-kasa-cache', 1);
+          r.onupgradeneeded = function () { var d = r.result; if (!d.objectStoreNames.contains('c')) d.createObjectStore('c'); if (!d.objectStoreNames.contains('w')) d.createObjectStore('w', { keyPath: 'n', autoIncrement: true }); };
+          r.onsuccess = function () { res(r.result); }; r.onerror = function () { res(null); };
+        } catch (e) { res(null); }
+      });
+      return IDBP;
+    }
+    function cget(k) { return idb().then(function (d) { return !d ? null : new Promise(function (res) { try { var q = d.transaction('c').objectStore('c').get(k); q.onsuccess = function () { res(q.result === undefined ? null : q.result); }; q.onerror = function () { res(null); }; } catch (e) { res(null); } }); }); }
+    function cput(k, v) { return idb().then(function (d) { if (!d) return; try { d.transaction('c', 'readwrite').objectStore('c').put(v, k); } catch (e) { } }); }
+    function cacheSoon(k, v, every) { var n = Date.now(); if (lastPut[k] && n - lastPut[k] < (every || 15000)) return; lastPut[k] = n; cput(k, v); }
+    function isNet(e) { var c = conv(e); return !!(c && c.code === 'unavailable') || (typeof navigator !== 'undefined' && navigator.onLine === false); }
+    function wAll() { return idb().then(function (d) { return !d ? [] : new Promise(function (res) { try { var q = d.transaction('w').objectStore('w').getAll(); q.onsuccess = function () { res(q.result || []); }; q.onerror = function () { res([]); }; } catch (e) { res([]); } }); }); }
+    function wAdd(o) { return idb().then(function (d) { if (!d) return false; return new Promise(function (res) { try { var tx = d.transaction('w', 'readwrite'); tx.objectStore('w').add(o); tx.oncomplete = function () { res(true); }; tx.onerror = function () { res(false); }; } catch (e) { res(false); } }); }); }
+    function wDel(n) { return idb().then(function (d) { if (!d) return; return new Promise(function (res) { try { var tx = d.transaction('w', 'readwrite'); tx.objectStore('w').delete(n); tx.oncomplete = function () { res(); }; tx.onerror = function () { res(); }; } catch (e) { res(); } }); }); }
+    function wCount() { return wAll().then(function (a) { wq = a.length; return wq; }); }
+    var draining = false;
+    async function drain() {
+      if (draining) return; draining = true;
+      try {
+        await env.ready;
+        var all = await wAll(); wq = all.length;
+        for (var i = 0; i < all.length; i++) {
+          var w = all[i], r;
+          if (w.op === 'set') r = await sb.rpc('kv_set', { p_col: w.col, p_id: w.id, p_data: w.data, p_merge: !!w.merge });
+          else if (w.op === 'update') r = await sb.rpc('kv_merge', { p_col: w.col, p_id: w.id, p_patch: w.data });
+          else r = await sb.from('kv').delete().eq('col', w.col).eq('id', w.id);
+          if (r && r.error) { if (isNet(r.error)) break; }   // internet gitti: kuyruk sırada kalsın
+          await wDel(w.n); wq = Math.max(0, wq - 1);
+        }
+        resync();
+      } catch (e) { } finally { draining = false; wCount(); }
+    }
+    async function queueWrite(col, id, op, data, merge) {
+      if (QUEUEABLE.indexOf(top(col)) < 0) return false;
+      var ok = await wAdd({ col: col, id: id, op: op, data: data === undefined ? null : data, merge: !!merge, t: Date.now() });
+      if (ok) wq++;
+      return ok;
+    }
+
     async function runQuery(q) {
+      var key = 'q:' + q._c + '|' + JSON.stringify(q._f) + '|' + q._o + '|' + q._d + '|' + q._l;
+      try {
+        var rows0 = await netQuery(q);
+        cacheSoon(key, rows0);
+        return rows0;
+      } catch (e) {
+        if (isNet(e)) { var c0 = await cget(key); if (c0) return c0; }
+        throw e;
+      }
+    }
+    async function netQuery(q) {
       var rows = [], page = 200, off = 0, want = q._l;
       for (;;) {
         var n = want != null ? Math.min(page, want - rows.length) : page;
@@ -181,31 +238,50 @@
     DocRef.prototype.get = async function () {
       var p = perm(this._c, false); if (p) throw p;
       await env.ready;
-      var r = await sb.from('kv').select('data').eq('col', this._c).eq('id', this.id).maybeSingle();
-      if (r.error) throw conv(r.error);
-      return docSnap(this._c, this.id, r.data ? norm(r.data.data) : undefined);
+      var dkey = 'd:' + this._c + '/' + this.id, r;
+      try { r = await sb.from('kv').select('data').eq('col', this._c).eq('id', this.id).maybeSingle(); }
+      catch (e0) { r = { error: e0 }; }
+      if (r.error) {
+        if (isNet(r.error)) { var cd = await cget(dkey); if (cd) return docSnap(this._c, this.id, cd.v === null ? undefined : cd.v); }
+        throw conv(r.error);
+      }
+      var dv = r.data ? norm(r.data.data) : undefined;
+      cacheSoon(dkey, { v: dv === undefined ? null : dv }, 8000);
+      return docSnap(this._c, this.id, dv);
     };
     DocRef.prototype.set = async function (data, opts) {
       var p = perm(this._c, true); if (p) throw p;
       await env.ready;
       var d = clone(data), merge = !!(opts && opts.merge);
-      var r = await sb.rpc('kv_set', { p_col: this._c, p_id: this.id, p_data: d, p_merge: merge });
-      if (r.error) throw conv(r.error);
+      var r;
+      try { r = await sb.rpc('kv_set', { p_col: this._c, p_id: this.id, p_data: d, p_merge: merge }); } catch (e0) { r = { error: e0 }; }
+      if (r.error) {
+        if (isNet(r.error) && await queueWrite(this._c, this.id, 'set', d, merge)) { localApply(this._c, this.id, function (old) { return merge ? Object.assign({}, old || {}, d) : d; }); return; }
+        throw conv(r.error);
+      }
       localApply(this._c, this.id, function (old) { return merge ? Object.assign({}, old || {}, d) : d; });
     };
     DocRef.prototype.update = async function (patch) {
       var p = perm(this._c, true); if (p) throw p;
       await env.ready;
-      var r = await sb.rpc('kv_merge', { p_col: this._c, p_id: this.id, p_patch: clone(patch) });
-      if (r.error) throw conv(r.error);
+      var r, pt = clone(patch);
+      try { r = await sb.rpc('kv_merge', { p_col: this._c, p_id: this.id, p_patch: pt }); } catch (e0) { r = { error: e0 }; }
+      if (r.error) {
+        if (isNet(r.error) && await queueWrite(this._c, this.id, 'update', pt, true)) { localApply(this._c, this.id, function (old) { return Object.assign({}, old || {}, pt); }); return; }
+        throw conv(r.error);
+      }
       var merged = norm(r.data);
       localApply(this._c, this.id, function () { return merged; });
     };
     DocRef.prototype.delete = async function () {
       var p = perm(this._c, true); if (p) throw p;
       await env.ready;
-      var r = await sb.from('kv').delete().eq('col', this._c).eq('id', this.id);
-      if (r.error) throw conv(r.error);
+      var r;
+      try { r = await sb.from('kv').delete().eq('col', this._c).eq('id', this.id); } catch (e0) { r = { error: e0 }; }
+      if (r.error) {
+        if (isNet(r.error) && await queueWrite(this._c, this.id, 'delete', null, false)) { localApply(this._c, this.id, function () { return null; }); return; }
+        throw conv(r.error);
+      }
       localApply(this._c, this.id, function () { return null; });
     };
     DocRef.prototype.collection = function (n) { return new Coll(this.path + '/' + n); };
@@ -287,7 +363,7 @@
       collection: function (n) { return new Coll(String(n)); },
       doc: function (p) { return new DocRef(String(p)); }
     };
-    return { db: db, resync: resync, _listeners: listeners, _onChange: onChange, _conv: conv, _matches: matches };
+    return { db: db, resync: resync, drain: drain, pending: function () { return wq; }, countPending: wCount, _listeners: listeners, _onChange: onChange, _conv: conv, _matches: matches };
   }
 
   // ---------- Dosya indirme ----------
@@ -390,6 +466,9 @@
     sb = root.supabase.createClient(cfg.url, cfg.key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: AUTH_K }, realtime: { params: { eventsPerSecond: 20 } } });
     var s = null;
     try { var g = await sb.auth.getSession(); s = g.data && g.data.session; } catch (e) { }
+    if (!s && !cred && !navigator.onLine) {   // internet yok: cihazda kayıtlı oturumla aç
+      try { var raw = JSON.parse(localStorage.getItem(AUTH_K) || 'null'); var uu = raw && (raw.user || (raw.currentSession && raw.currentSession.user)); if (uu) s = { user: uu }; } catch (e) { }
+    }
     if (cred) {                       // Formdan yeni giris: eski oturumu kullanma
       var r = await sb.auth.signInWithPassword({ email: cred.email, password: cred.password });
       if (r.error) throw r.error;
@@ -417,7 +496,9 @@
       delete: async function (id) { await DB.doc('resimler/' + id).delete(); }
     };
     sb.auth.onAuthStateChange(function (ev) { if (ev === 'SIGNED_OUT') { showForm(cfgNow, 'Oturum bitti, tekrar giris yap.'); } });
-    root.addEventListener('online', function () { core.resync(); });
+    root.addEventListener('online', function () { core.resync(); core.drain(); });
+    core.countPending().then(function (n) { if (n && navigator.onLine) core.drain(); });
+    setInterval(function () { if (core.pending() && navigator.onLine) core.drain(); }, 15000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) core.resync(); });
     readyRes(true);
   }
@@ -430,7 +511,7 @@
       return null;
     }
   };
-  root.limonSupabase = { get sb() { return sb; }, get isOwner() { return owner; } };
+  root.limonSupabase = { get sb() { return sb; }, get isOwner() { return owner; }, pending: function () { return core ? core.pending() : 0; } };
 
   // ---------- Arayuz ----------
   var ov = null;
@@ -535,6 +616,7 @@
   }
 
   function gear() {
+    if (!owner) return;
     if (document.getElementById('lsbGear')) return;
     css();
     var b = document.createElement('button'); b.id = 'lsbGear'; b.type = 'button'; b.title = 'Bağlantı ayarları'; b.textContent = '⚙';
@@ -2680,6 +2762,28 @@ details.qhelp .notbox{margin-top:8px}
       el.style.color='#2e9e5b'; el.textContent='✓ Tüm satışlar kaydedildi';
     }
   }
+
+  // ---- Durum şeridi: çevrimdışı (turuncu) / eşitlendi (yeşil) ----
+  (function(){
+    var bar=document.createElement('div'); bar.id='netBar'; bar.setAttribute('role','status');
+    bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;padding:8px 12px;text-align:center;font:700 15px/1.3 system-ui,sans-serif;color:#fff;display:none';
+    document.body.appendChild(bar);
+    var wasBusy=false, greenUntil=0;
+    function total(){ var n=queue.length; try{ n+=(window.limonSupabase&&window.limonSupabase.pending&&window.limonSupabase.pending())||0; }catch(e){} return n; }
+    function tick(){
+      var off=!navigator.onLine, n=total(), now=Date.now();
+      if(off || n>0){
+        wasBusy=true;
+        bar.style.background='#e8890c'; bar.style.display='block';
+        bar.textContent=off?('Çevrimdışı Mod · '+n+' işlem internet gelince gönderilecek'):('Gönderiliyor · '+n+' işlem bekliyor');
+        document.body.style.paddingTop='38px';
+      } else if(wasBusy){
+        wasBusy=false; greenUntil=now+4000;
+        bar.style.background='#2e9e5b'; bar.style.display='block'; bar.textContent='Tüm işlemler eşitlendi ✓';
+      } else if(now>greenUntil){ bar.style.display='none'; document.body.style.paddingTop=''; }
+    }
+    setInterval(tick,1000); window.addEventListener('online',tick); window.addEventListener('offline',tick); tick();
+  })();
   function startKasa(){
     if(!db) return;
     if(!kUnsub) kUnsub=db.collection('satislar').orderBy('t','desc').limit(60).onSnapshot(function(s){ kSnap=s; kRender(); }, function(){});
@@ -2858,7 +2962,7 @@ details.qhelp .notbox{margin-top:8px}
   });
   var iadeMode=false;
   function kOk(){ return cur ? !!(cur.owner || cur.gunsonu) : !!isOwner; }
-  function kYetki(){ var ok=kOk(); $('kHead').style.display=ok?'':'none'; $('klist').style.display=ok?'':'none'; try{ $('kMore').querySelector('summary').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; var b=$('iadeBtn'); b.textContent=iadeMode?(ok?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(ok?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)'); $('kgo').textContent=iadeMode?(ok?'İadeyi al':'Değişimi al'):'Sepete ekle'; }catch(eY){} }
+  function kYetki(){ var ok=kOk(); $('kHead').style.display=ok?'':'none'; $('klist').style.display=ok?'':'none'; try{ hdfUpd(); }catch(eHd){} try{ $('kMore').querySelector('summary').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; var b=$('iadeBtn'); b.textContent=iadeMode?(ok?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(ok?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)'); $('kgo').textContent=iadeMode?(ok?'İadeyi al':'Değişimi al'):'Sepete ekle'; }catch(eY){} }
   function setIade(on){
     iadeMode=on;
     var b=$('iadeBtn'); b.classList.toggle('on',on); b.textContent=on?(kOk()?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(kOk()?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)');
@@ -3425,7 +3529,8 @@ details.qhelp .notbox{margin-top:8px}
   }
   var probeTry=0;
   async function probeOwner(){
-    try{ await tmo(readOnce(db.collection('alis').limit(1)),10000); isOwner=true; setTimeout(function(){ try{ acodeBackfill(); }catch(eb){} },3000); }catch(e){ isOwner=false; if(probeTry++<3) setTimeout(probeOwner,8000); }
+    if(!navigator.onLine && window.limonSupabase && window.limonSupabase.isOwner){ isOwner=true; }
+    else try{ await tmo(readOnce(db.collection('alis').limit(1)),10000); isOwner=true; setTimeout(function(){ try{ acodeBackfill(); }catch(eb){} },3000); }catch(e){ isOwner=false; if(probeTry++<3) setTimeout(probeOwner,8000); }
     $('tabYon').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
     try{ authDecide(); }catch(e5){}
     try{ if(!$('sayimView').hidden){ $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); } }catch(e4){}
@@ -4250,7 +4355,7 @@ details.qhelp .notbox{margin-top:8px}
   var gdSel='', gdBusy=false, gdUnsub=null, gdDocs=[];
   function gdCan(){ return !!(isOwner || (cur && cur.gider)); }
   function urCan(){ return !!(isOwner || (cur && cur.urun)); }
-  function gdTabUpd(){ $('tabGider').hidden=!gdCan(); $('tabUrun').hidden=!urCan(); var gsOk=!!(isOwner || (cur && cur.gunsonu)); $('tabGunSonu').hidden=!gsOk; if(!gsOk && !$('gunsonuView').hidden){ try{ setTab('kasa'); }catch(eGs){} } try{ kYetki(); }catch(eKy){} }
+  function gdTabUpd(){ $('tabGider').hidden=!gdCan(); $('tabUrun').hidden=!(isOwner||cur); try{ ['urOnl','urCsv'].forEach(function(i){ var e=$(i); if(e) e.hidden=!urCan(); }); }catch(eUr){} var gsOk=!!(isOwner || (cur && cur.gunsonu)); $('tabGunSonu').hidden=!gsOk; if(!gsOk && !$('gunsonuView').hidden){ try{ setTab('kasa'); }catch(eGs){} } try{ kYetki(); }catch(eKy){} }
   function gdMsg(kind,t){ var m=$('gdMsg'); m.className='msg show '+kind; m.textContent=t; }
   function gdChips(){
     $('gdTur').innerHTML=GD_TUR.map(function(r){ var on=(gdSel===r[0]);
@@ -4350,7 +4455,7 @@ details.qhelp .notbox{margin-top:8px}
     }
   });
   function urRender(){
-    if(!urCan() || $('urunView').hidden) return;
+    if(!(isOwner||cur) || $('urunView').hidden) return;
     var ae=document.activeElement; if(ae && ae.tagName==='INPUT' && $('urList').contains(ae)){ urPend=true; return; }
     urPend=false;
     urGrpFill(); var gq=$('urGrp').value;
@@ -4382,6 +4487,7 @@ details.qhelp .notbox{margin-top:8px}
       var op=(urOpen[c.id]!==undefined)?!!urOpen[c.id]:(tot===1&&toks.length>0);
       return '<div class="item"><div class="itop" data-urtog="'+esc(c.id)+'" style="cursor:pointer"><div class="thumbs">'+(th?'<img src="'+esc(th)+'" alt="">':'')+'</div><div class="meta" style="flex:1"><b>'+esc(urAd(x))+'</b> <b style="float:right;font-size:18px">'+(op?'▾':'▸')+'</b><br><small style="color:var(--mute)">No '+esc(x.modelNo)+' · Barkod '+esc(bcTxt)+(x.tkod?' · '+esc(x.tkod):'')+(x.kumas?' · '+esc(x.kumas):'')+'</small><div class="urk"><span><b>Fiyat: '+esc(x.fiyat||0)+' ₺</b></span>'+(Number(x.fiyat2)>0?'<span>Fiyat 2: <b>'+esc(x.fiyat2)+' ₺</b></span>':'')+(alv>0?'<span class="al">Alış: <b>'+esc(Math.round(alv))+' ₺</b></span>':'')+'<span>Stok: <b>'+adet+' adet</b></span></div>'+(op?'':'<small style="color:var(--mute);display:block;margin-top:4px">'+sizes.map(function(z){ return esc(z)+': '+(Number(st[z])||0); }).join(' · ')+'</small>')+'</div></div>'+
         (!op?'':urPrHtml(c.id)+'<div style="margin-top:8px">'+sizes.map(function(z){
+          if(!urCan()) return '<div class="srow" style="justify-content:space-between;padding:4px 0"><span>'+esc(BD(z))+': <b>'+(Number(st[z])||0)+'</b></span></div>';
           return '<div class="srow" style="justify-content:space-between;align-items:center;padding:4px 0"><span>'+esc(BD(z))+': <input class="inp" style="width:84px;padding:8px;font-size:16px;font-weight:700;display:inline-block" type="text" inputmode="numeric" value="'+(Number(st[z])||0)+'" data-uri="'+esc(c.id)+'|'+esc(z)+'"> <button type="button" class="mini main" data-urset="'+esc(c.id)+'|'+esc(z)+'">Kaydet</button></span><span><button type="button" class="mini" data-urs="'+esc(c.id)+'|'+esc(z)+'|-1">−1</button> <button type="button" class="mini main" data-urs="'+esc(c.id)+'|'+esc(z)+'|1">+1</button> <button type="button" class="mini main" data-urs="'+esc(c.id)+'|'+esc(z)+'|10">+10</button></span></div>';
         }).join('')+'</div>')+
         (isOwner&&op?'<div class="btns" style="margin-top:8px"><button type="button" class="mini danger" data-urdel="'+esc(c.id)+'">Ürünü sil</button></div>':'')+'</div>';
@@ -4416,11 +4522,11 @@ details.qhelp .notbox{margin-top:8px}
   $('urList').addEventListener('keydown',function(ev){ if(ev.key==='Enter' && ev.target && ev.target.hasAttribute && ev.target.hasAttribute('data-uri')){ ev.preventDefault(); var bt=$('urList').querySelector('[data-urset="'+ev.target.getAttribute('data-uri')+'"]'); if(bt) bt.click(); } });
   $('urList').addEventListener('focusout',function(){ setTimeout(function(){ if(urPend) urRender(); },200); });
   $('urList').addEventListener('click',async function(ev){
-    if(!urCan() || !db) return;
+    if(!(isOwner||cur) || !db) return;
     if(ev.target && ev.target.id==='urMore'){ urLimit+=40; urRender(); return; }
     var tg=ev.target.closest&&ev.target.closest('[data-urtog]');
     if(tg && !ev.target.closest('[data-urs],[data-urdel],[data-urset],input')){ var tid=tg.getAttribute('data-urtog'); var cur=(urOpen[tid]!==undefined)?!!urOpen[tid]:false; urOpen[tid]=!cur; urRender(); return; }
-    var b=ev.target.closest&&ev.target.closest('[data-urs],[data-urdel],[data-urset]'); if(!b || urBusy) return;
+    var b=ev.target.closest&&ev.target.closest('[data-urs],[data-urdel],[data-urset]'); if(!b || urBusy) return; if(!urCan()) return;
     if(b.hasAttribute('data-urset')){
       var pp=b.getAttribute('data-urset').split('|'), inp=$('urList').querySelector('[data-uri="'+pp[0]+'|'+pp[1]+'"]'), vv=String(inp?inp.value:'').replace(/\D/g,'');
       if(vv===''){ urMsg('err','Adedi sayı olarak yaz.'); return; }
@@ -4461,7 +4567,7 @@ details.qhelp .notbox{margin-top:8px}
   function hdfUpd(tot){
     if(typeof tot==='number') hdfTot=tot;
     var c=$('hdfCard'); if(!c) return;
-    if(!(hedefG>0)){ c.hidden=true; return; }
+    if(!kOk() || !(hedefG>0)){ c.hidden=true; return; }
     c.hidden=false;
     var pct=Math.max(0,Math.round(hdfTot/hedefG*100));
     $('hdfPct').textContent='%'+pct;
@@ -4847,5 +4953,6 @@ details.qhelp .notbox{margin-top:8px}
 })();
 </script>
 
+<script>if('serviceWorker' in navigator){ window.addEventListener('load',function(){ try{ navigator.serviceWorker.register('sw.js'); }catch(e){} }); }</script>
 </body>
 </html>
