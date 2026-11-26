@@ -1078,6 +1078,8 @@ details.qhelp .notbox{margin-top:8px}
       <label class="fl" for="gsSay">Kasada saydığın nakit</label><input class="inp" id="gsSay" type="text" inputmode="decimal" autocomplete="off" placeholder="Örn: 8450">
       <div id="gsRes" style="margin-top:12px;font-size:20px;font-weight:800"></div>
       <button type="button" class="mini" id="gsRef" style="margin-top:10px">Yenile</button>
+      <button type="button" class="mini main" id="gsKapat" style="margin-top:10px;width:100%">✓ Gün sonu yapıldı (Son satışlar listesini temizle)</button>
+      <div class="tip" id="gsKapMsg" style="text-align:left;margin:6px 0 0"></div>
     </div>
   </div>
   <div id="etiketView" hidden>
@@ -2837,6 +2839,7 @@ details.qhelp .notbox{margin-top:8px}
     }, function(e){ kshow('err','Ürün listesi yüklenemedi: '+((e&&(e.code||e.message))||'hata')); });
     if(!kTodayUnsub){ var dt=new Date(trDay0()); kTodayUnsub=db.collection('satislar').where('t','>=',dt.getTime()).onSnapshot(function(s){ kToday=s; kRender(); }, function(){}); }
     try{ hdfStart(); }catch(eH2){}
+    try{ kGsStart(); }catch(eGs){}
     try{ tyStart(); }catch(eT2){}
     updPend(); flush();
   }
@@ -3190,11 +3193,15 @@ details.qhelp .notbox{margin-top:8px}
     }
     function sum(s){ var f=Number(s.fiyat)||0; tot+=f; cnt+=(s.iade?-1:1); var pp=payParts(s); tn+=pp[0]; tk+=pp[1]; }
     if(kToday) kToday.docs.forEach(function(d){ ids[d.id]=1; var s=d.data()||{}; if(s.t>=d0.getTime()) sum(s); });
-    if(kSnap) kSnap.docs.forEach(function(d){
+    var kCut=Math.max(d0.getTime(), Number(kGsT)||0), kDocs=(kToday?kToday.docs.slice():[]).filter(function(d){ var s=d.data()||{}; return (Number(s.t)||0)>=kCut; });
+    kDocs.sort(function(a,b){ return (Number((b.data()||{}).t)||0)-(Number((a.data()||{}).t)||0); });
+    if(kSnap) kSnap.docs.forEach(function(d){ ids[d.id]=1; });
+    kDocs.forEach(function(d){
       ids[d.id]=1; var s=d.data()||{};
       var riOk=(!s.iade && s.kanal==='magaza' && !s.iadeEdildi && !riDone[d.id]);
       var riBtn=riOk?'<button type="button" class="mini" data-riade="'+esc(d.id)+'">↩ İade/Değişim</button>':'';
       var gaBtn=(isOwner && !s.iade && s.kanal==='magaza' && !s.iadeEdildi && !riDone[d.id])?'<button type="button" class="mini danger" data-sid="'+esc(d.id)+'">Geri al</button>':'';
+      if(isOwner && s.iade) gaBtn='<button type="button" class="mini danger" data-iid="'+esc(d.id)+'">İadeyi iptal et</button>';
       rows.push(row(s,((s.iadeEdildi||riDone[d.id])?'✓ iade edildi · ':'')+(s.iade?'↩ İADE · ':'')+esc(s.kanal||'magaza')+' · '+payLabel(s)+((isOwner&&Number(s.iskonto)>0)?' · 🏷 iskonto -'+s.iskonto+' ₺':'')+(s.uyari?' · ⚠ stok uyarısı':''),((riBtn||gaBtn)?'<div class="btns">'+riBtn+gaBtn+'</div>':'')));
     });
     queue.forEach(function(q){
@@ -3207,8 +3214,38 @@ details.qhelp .notbox{margin-top:8px}
     $('ktop').textContent='· bugün '+cnt+' adet, '+tot+' ₺ (nakit '+r2(tn)+' · kart '+r2(tk)+')';
     try{ if(!$('gunsonuView').hidden) gsRender(); }catch(eG){}
     try{ hdfUpd(tot); }catch(eH){}
-    klistEl.innerHTML=rows.length?grp(rows).map(gHtml).join(''):'<div class="empty">Henüz satış yok.</div>';
+    if(!rows.length){ klistEl.innerHTML='<div class="empty">Henüz satış yok.</div>'; return; }
+    var ilk=rows.slice(0,5), kalan=rows.slice(5), h=grp(ilk).map(gHtml).join('');
+    if(kalan.length){
+      var gs={}, go=[];
+      kalan.forEach(function(r){ var s=r.s, g=s.iade?'↩ İadeler':(String(s.cinsiyet||'').trim()||'Diğer'); if(!gs[g]){ gs[g]={n:0,t:0,r:[]}; go.push(g); } gs[g].n+=1; gs[g].t=r2(gs[g].t+(Number(s.fiyat)||0)); gs[g].r.push(r); });
+      h+='<div class="tip" style="text-align:left;font-weight:700;margin:12px 0 6px">Önceki satışlar (gruplu)</div>';
+      go.forEach(function(g){ var o=!!(kOpenG&&kOpenG[g]);
+        h+='<div class="item"><div class="itop" data-kgrp="'+esc(g)+'" style="cursor:pointer"><div class="meta" style="flex:1"><b>'+esc(g)+'</b> · '+gs[g].n+' adet · <b>'+esc(gs[g].t)+' ₺</b> <b style="float:right;font-size:18px">'+(o?'▾':'▸')+'</b></div></div>'+(o?grp(gs[g].r).map(gHtml).join(''):'')+'</div>'; });
+    }
+    klistEl.innerHTML=h;
   }
+  var kOpenG={}, kGsT=0, kGsUn=null;
+  function kGsStart(){ if(kGsUn || !db) return; try{ kGsUn=db.doc('kayit/gunsonu').onSnapshot(function(sn){ var x=sn.exists?(sn.data()||{}):{}; kGsT=Number(x.t)||0; try{ kRender(); }catch(e){} }, function(){ kGsUn=null; }); }catch(e){ kGsUn=null; } }
+  klistEl.addEventListener('click',function(ev){
+    var g=ev.target.closest&&ev.target.closest('[data-kgrp]'); if(!g) return;
+    var k=g.getAttribute('data-kgrp'); if(!kOpenG) kOpenG={}; kOpenG[k]=!kOpenG[k]; kRender();
+  });
+  klistEl.addEventListener('click', async function(ev){
+    var b=ev.target.closest&&ev.target.closest('[data-iid]'); if(!b || !isOwner || kBusy) return;
+    if(b.getAttribute('data-arm')!=='1'){ b.setAttribute('data-arm','1'); b.textContent='Emin misin? İptal et'; setTimeout(function(){ try{ b.removeAttribute('data-arm'); b.textContent='İadeyi iptal et'; }catch(e){} },4000); return; }
+    kBusy=true; b.disabled=true;
+    try{
+      var iid=b.getAttribute('data-iid'), s=(await tmo(db.doc('satislar/'+iid).get(),8000)).data();
+      if(!s || !s.iade) return;
+      await tmo(db.doc('satislar/'+iid).delete(),8000);
+      try{ await db.doc('kayit/ii'+Date.now()).set({tur:'iade_iptal', docId:s.docId||'', modelNo:s.modelNo||0, beden:s.beden||'', fiyat:s.fiyat||0, kaynak:s.kaynak||'', t:Date.now()}); }catch(e2){}
+      if(s.kaynak){ try{ await tmo(db.doc('satislar/'+s.kaynak).update({iadeEdildi:false}),8000); }catch(e3){} try{ delete riDone[s.kaynak]; }catch(e4){} }
+      if(s.docId && s.beden){ try{ await stokEkle(s.docId,s.beden,-1); }catch(e5){ kshow('err','İade iptal edildi ama stok düşürülemedi. Ürünün stoğunu elle kontrol et.'); return; } }
+      kshow('ok','İade iptal edildi, ürün stoktan düşüldü ✓');
+    }catch(e){ kshow('err','İade iptal edilemedi. Tekrar dene.'); }
+    finally{ kBusy=false; b.disabled=false; try{ kRender(); }catch(e6){} }
+  });
   klistEl.addEventListener('click', async function(ev){
     var b=ev.target.closest ? ev.target.closest('[data-qid]') : null; if(!b) return;
     if(flushing || kBusy){ kshow('info','Kayıt sürüyor, birkaç saniye sonra tekrar dene.'); return; }
@@ -3577,6 +3614,14 @@ details.qhelp .notbox{margin-top:8px}
     gsBusy=false; gsRender();
   }
   $('tabGunSonu').addEventListener('click',function(){ setTab('gunsonu'); });
+  $('gsKapat').addEventListener('click', async function(){
+    var m=$('gsKapMsg'); if(!db || !(isOwner || (cur && cur.gunsonu))){ m.textContent='Bu işlem sadece yetkili içindir.'; return; }
+    if(this.getAttribute('data-arm')!=='1'){ var bb=this; bb.setAttribute('data-arm','1'); bb.textContent='Emin misin? Gün sonunu kaydet'; setTimeout(function(){ try{ bb.removeAttribute('data-arm'); bb.textContent='✓ Gün sonu yapıldı (Son satışlar listesini temizle)'; }catch(e){} },4000); return; }
+    this.removeAttribute('data-arm'); this.textContent='✓ Gün sonu yapıldı (Son satışlar listesini temizle)'; this.disabled=true;
+    try{ var tt=Date.now(); await tmo(db.doc('kayit/gunsonu').set({tur:'gun_sonu', t:tt, kim:curName()||'Yönetici'}),8000); kGsT=tt; m.style.color='var(--ok)'; m.textContent='✓ Gün sonu kaydedildi. Son satışlar listesi temizlendi.'; try{ kRender(); }catch(e1){} }
+    catch(e){ m.style.color='var(--err)'; m.textContent='Kaydedilemedi'+(e&&e.code?' ('+e.code+')':'')+'. Tekrar dene.'; }
+    finally{ this.disabled=false; }
+  });
   function gsOpen(){
     var b=$('gsBox');
     try{ startKasa(); }catch(e){}
@@ -3785,6 +3830,8 @@ details.qhelp .notbox{margin-top:8px}
     try{
       alisMap={}; alisRaw={}; yA.docs.forEach(function(d){ var v=Number((d.data()||{}).v)||0; alisRaw[d.id]=v; alisMap[d.id]=v; });
       yonDocs=yU.docs;
+      // Alış kaydı yoksa ürünün etiketteki alış kodundan (acode) al: önceden girilmiş alışlar 'girilmemiş' görünmesin
+      yonDocs.forEach(function(d){ if(alisRaw[d.id]>0) return; var ac=Number((d.data()||{}).acode)||0; if(ac>0){ alisRaw[d.id]=ac; alisMap[d.id]=ac; } });
       var d0=new Date(trDay0());
       var wk=new Date(trWeek0());
       var mo=trMonth0();
