@@ -511,7 +511,17 @@
       return null;
     }
   };
-  root.limonSupabase = { get sb() { return sb; }, get isOwner() { return owner; }, pending: function () { return core ? core.pending() : 0; } };
+  root.limonSupabase = { get sb() { return sb; }, get isOwner() { return owner; }, pending: function () { return core ? core.pending() : 0; },
+    // Personel giriş ekranından yönetici (sahip) girişi: doğru hesapsa cihaz yönetici olarak yeniden açılır
+    ownerLogin: async function (user, pass) {
+      if (!sb) throw new Error('baglanti yok');
+      var mail = String(user || '').trim().toLowerCase(); if (mail.indexOf('@') < 0) mail = mail + '@limoncocuk.com';
+      var r = await sb.auth.signInWithPassword({ email: mail, password: pass });
+      if (r.error) throw r.error;
+      var o = await sb.rpc('is_owner'); if (o.error) throw o.error;
+      if (!o.data) return false;
+      ls(OWN_K, '1'); location.reload(); return true;
+    } };
 
   // ---------- Arayuz ----------
   var ov = null;
@@ -4733,6 +4743,7 @@ details.qhelp .notbox{margin-top:8px}
     $('lgBtn').disabled=true;
     try{
       var d=await tmo(db.doc('personel/'+u).get(),10000), x=d.exists?d.data():null, ok=false;
+      if(!x && window.limonSupabase && window.limonSupabase.ownerLogin){ var own=false; try{ own=await tmo(window.limonSupabase.ownerLogin(u,p),15000); }catch(eO){ own=false; } if(own){ lgShow('ok','Yönetici girişi yapılıyor…'); return; } lgFail(); return; }
       if(x && x.aktif!==false && x.salt && x.h){ ok=((await sha(x.salt+':'+p))===x.h); }
       if(!ok){ lgFail(); return; }
       cur={u:u,ad:x.ad||u,gider:x.gider===true,urun:x.urun===true,gunsonu:x.gunsonu===true};
