@@ -3698,7 +3698,8 @@ details.qhelp .notbox{margin-top:8px}
     var h='<div class="card"><b>Satış ve kâr</b>';
     [['Bugün','bugun'],['Bu hafta','hafta'],['Bu ay','ay']].forEach(function(r){
       var p=per[r[1]];
-      h+='<div class="srow" style="justify-content:space-between"><b style="width:auto">'+r[0]+'</b><span>'+p[0]+' adet · ciro '+money(p[1])+' · kâr '+money(p[2])+'</span></div>';
+      var kp=(p[4]>0)?Math.round(p[2]/p[4]*100):0;
+      h+='<div class="srow" style="justify-content:space-between;flex-wrap:wrap"><b style="width:auto">'+r[0]+'</b><span style="text-align:right">'+p[0]+' adet · ciro '+money(p[1])+' · kâr '+money(p[2])+(p[4]>0?' <b>(%'+kp+')</b>':'')+'<br><small style="color:var(--mute)">🏷 iskonto toplam '+money(p[3])+'</small></span></div>';
     });
     if(eksikSatis) h+='<p class="tip" style="text-align:left;color:var(--err)">'+eksikSatis+' satışın alış fiyatı girilmediği için kâra katılmadı.</p>';
     var catKeys=CINS.filter(function(k){ return yonCat[k]; }).concat(Object.keys(yonCat).filter(function(k){ return CINS.indexOf(k)<0; }));
@@ -3855,12 +3856,13 @@ details.qhelp .notbox{margin-top:8px}
       var d0=new Date(trDay0());
       var wk=new Date(trWeek0());
       var mo=trMonth0();
-      var per={bugun:[0,0,0],hafta:[0,0,0],ay:[0,0,0]}, eksikS=0;
+      var per={bugun:[0,0,0,0,0],hafta:[0,0,0,0,0],ay:[0,0,0,0,0]}, eksikS=0;
       yS.docs.forEach(function(d){
         var x=d.data()||{}; var lo=Math.min(mo,wk.getTime()); if(!(x.t>=lo)) return;
         var f=Number(x.fiyat)||0, al=alisMap[x.docId], kar=al?(x.iade?(f+al):(f-al)):0; if(!al) eksikS++;
         var keys=[]; if(x.t>=mo) keys.push('ay'); if(x.t>=wk.getTime()) keys.push('hafta'); if(x.t>=d0.getTime()) keys.push('bugun');
-        keys.forEach(function(k){ per[k][0]+=(x.iade?-1:1); per[k][1]+=f; per[k][2]+=kar; });
+        var isk=(!x.iade && Number(x.iskonto)>0)?Number(x.iskonto):0;
+        keys.forEach(function(k){ per[k][0]+=(x.iade?-1:1); per[k][1]+=f; per[k][2]+=kar; per[k][3]+=isk; if(al) per[k][4]+=f; });
       });
       var st=[0,0,0,0]; yonCat={};
       yU.docs.forEach(function(d){
