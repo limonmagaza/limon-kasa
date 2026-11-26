@@ -1027,6 +1027,7 @@ details.qhelp .notbox{margin-top:8px}
       <div id="camBox" hidden style="margin:10px 0"><div class="scanwrap"><video id="camVid" playsinline muted style="width:100%;border-radius:14px;background:#000"></video><div class="scanframe"></div><div class="scanline"></div></div><button type="button" class="mini" id="camStop" style="margin-top:8px">Kamerayı kapat</button></div>
       <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" id="sbBtn">🔍 Stok Bak</button></div>
       <details class="kmore" id="kMore"><summary>⚙️ Diğer (İade) ▾</summary><div class="kmorein">
+        <button type="button" class="chip" id="fisBtn">🧾 Fiş yazdır: KAPALI (bu cihaz)</button>
         <button type="button" class="chip" id="iadeBtn">↩ İade al (kapalı)</button>
         <div class="tip" style="text-align:left;margin:0">İade parası nasıl verilecek?</div>
         <div id="odeme" style="display:flex;gap:8px"><button type="button" class="chip on" data-pay="nakit">💵 Nakit</button><button type="button" class="chip" data-pay="kart">💳 Kart</button></div>
@@ -2917,14 +2918,39 @@ details.qhelp .notbox{margin-top:8px}
     if(!sbx.hidden){ if($('splitN').value!=='') splitSync('n'); else if($('splitK').value!=='') splitSync('k'); else splitSync(''); }
     if(scanEl.value) ksearch();
   }
+
+  // ---- Satış fişi (58 mm, sadece açık olan cihazda) ----
+  function fisOn(){ try{ return localStorage.getItem('limonFis')==='1'; }catch(e){ return false; } }
+  function fisBtnUpd(){ var b=$('fisBtn'); if(b){ b.textContent='🧾 Fiş yazdır: '+(fisOn()?'AÇIK':'KAPALI')+' (bu cihaz)'; b.classList.toggle('on',fisOn()); } }
+  function fisHtml(items,tot,disc,odeme,satan){
+    var d=new Date(), tr=function(n){ return Number(n).toFixed(2).replace('.',','); };
+    var g=[], m={}; items.forEach(function(it){ var k=it.code; if(!m[k]){ m[k]={it:it,n:0}; g.push(m[k]); } m[k].n++; });
+    var rows=g.map(function(x){ var ln=(Number(x.it.fiyat)||0)*x.n; return '<div class="r"><span>'+esc(x.it.ad||'')+(x.n>1?' x'+x.n:'')+'</span><b>'+tr(ln)+'</b></div>'; }).join('');
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{size:58mm auto;margin:0}html,body{margin:0;padding:0;background:#fff;color:#000}body{width:48mm;padding:2mm 4mm 6mm;font:12px/1.35 Arial,sans-serif}.c{text-align:center}.r{display:flex;justify-content:space-between;gap:6px;margin:2px 0}.r span{flex:1}hr{border:0;border-top:1px dashed #000;margin:5px 0}.t{font-size:16px;font-weight:800}</style></head><body>'+
+      '<div class="c"><b style="font-size:16px">LIMON ÇOCUK</b><br>'+d.toLocaleDateString('tr-TR')+' '+d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})+'</div><hr>'+rows+'<hr>'+
+      (disc>0?'<div class="r"><span>İskonto</span><b>-'+tr(disc)+'</b></div>':'')+
+      '<div class="r t"><span>TOPLAM</span><b>'+tr(tot)+' TL</b></div><div class="r"><span>Ödeme</span><span style="text-align:right">'+esc(odeme)+'</span></div>'+
+      (satan?'<div class="r"><span>Satış</span><span style="text-align:right">'+esc(satan)+'</span></div>':'')+
+      '<hr><div class="c">Teşekkürler, yine bekleriz</div><div class="c">Değişim: fişle, 7 gün</div></body></html>';
+  }
+  function fisBas(items,tot,disc,odeme){
+    if(!fisOn()||!items.length) return;
+    try{
+      var f=document.createElement('iframe'); f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+      document.body.appendChild(f);
+      var dd=f.contentWindow.document; dd.open(); dd.write(fisHtml(items,tot,disc,odeme,curName())); dd.close();
+      setTimeout(function(){ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} setTimeout(function(){ try{ f.remove(); }catch(e){} },60000); },300);
+    }catch(e){}
+  }
+  (function(){ var b=$('fisBtn'); if(!b) return; fisBtnUpd(); b.addEventListener('click',function(){ try{ localStorage.setItem('limonFis',fisOn()?'0':'1'); }catch(e){} fisBtnUpd(); if(fisOn()) fisBas([{code:'T',ad:'TEST FİŞİ',fiyat:0}],0,0,'—'); }); })();
   function cartDone(){
     if(!cart.length) return;
     var dc=discCalc(); if(dc.err){ beep(false); kshow('err',dc.err); return; }
-    var base=Date.now(), n=cart.length, gross=cartGross(), disc=dc.d, tot=r2(gross-disc), nRem=0, pk=0, dLeft=disc;
+    var base=Date.now(), n=cart.length, gross=cartGross(), disc=dc.d, tot=r2(gross-disc), nRem=0, nRem0=0, pk=0, dLeft=disc;
     if(pay==='parca'){
       var nn=num($('splitN').value), kk=num($('splitK').value);
       if(isNaN(nn)||isNaN(kk)||nn<0||kk<0||Math.abs(nn+kk-tot)>0.009){ beep(false); kshow('err','Nakit + kart toplamı sepet toplamına ('+tot+' ₺) eşit olmalı.'); return; }
-      nRem=r2(nn); pk=r2(kk);
+      nRem=r2(nn); pk=r2(kk); nRem0=nRem;
     }
     cart.forEach(function(it,i){
       var list=Number(it.fiyat)||0, di=(i===cart.length-1)?dLeft:r2(disc*list/(gross||1)); if(di>list) di=list; if(di<0) di=0; dLeft=r2(dLeft-di);
@@ -2935,8 +2961,9 @@ details.qhelp .notbox{margin-top:8px}
       queue.push({sid:'s'+base+'-'+i+'-'+Math.floor(Math.random()*1000), docId:it.docId, mn:it.mn, size:it.size, code:it.code, fiyat:f, liste:list, iskonto:di, renk:it.renk, cinsiyet:it.cinsiyet, odeme:od, nakit:nk, kart:kt, satan:curName(), t:base+i});
     });
     var msgPay = pay==='parca' ? ('Nakit '+num($('splitN').value)+' ₺ + Kart '+pk+' ₺') : payTxt(pay);
-    qSave(); cart=[]; $('splitN').value=''; $('splitK').value=''; $('discV').value=''; $('discBox').hidden=true; cartRender(); beep(true);
+    var fisItems=cart.slice(); qSave(); cart=[]; $('splitN').value=''; $('splitK').value=''; $('discV').value=''; $('discBox').hidden=true; cartRender(); beep(true);
     kshow('ok','Satış tamamlandı ✓ '+n+' parça · '+tot+' ₺'+(disc>0?' (iskonto -'+disc+' ₺)':'')+' · '+msgPay);
+    try{ fisBas(fisItems,tot,disc,pay==='parca'?('Nakit '+nRem0+' / Kart '+pk):(pay==='kart'?'Kart':'Nakit')); }catch(eF){}
     kRender(); updPend(); flush();
   }
   $('cartDone').addEventListener('click',cartDone);
