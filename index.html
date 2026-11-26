@@ -1038,6 +1038,7 @@ details.qhelp .notbox{margin-top:8px}
         <div id="odeme" style="display:flex;gap:8px"><button type="button" class="chip on" data-pay="nakit">💵 Nakit</button><button type="button" class="chip" data-pay="kart">💳 Kart</button></div>
       </div></details>
       <button class="btn" id="kgo" type="button" style="margin-top:10px">Sepete ekle</button>
+      <div id="hzKasa" hidden style="margin-top:10px"><div class="tip" style="text-align:left;margin:0 0 6px;font-weight:700">⚡ Hızlı ürünler (dokun, sepete eklensin)</div><div id="hzKasaIn" style="display:flex;flex-wrap:wrap;gap:8px"></div></div>
       <div class="tip" id="kpend" style="text-align:left;color:var(--err)"></div>
       <div class="msg" id="kmsg"></div>
       <div id="ksug"></div>
@@ -2818,7 +2819,7 @@ details.qhelp .notbox{margin-top:8px}
     if(!db) return;
     if(!kUnsub) kUnsub=db.collection('satislar').orderBy('t','desc').limit(60).onSnapshot(function(s){ kSnap=s; kRender(); }, function(){});
     if(!kCacheUnsub) kCacheUnsub=db.collection('urunler').orderBy('createdAt','desc').onSnapshot(function(s){
-      var nc={}; s.docs.forEach(function(d){ var x=d.data()||{}; if(x.modelNo) nc[x.modelNo]={id:d.id,x:x}; }); kCache=nc; try{ tyOzetPlan(); }catch(eTy){} try{ urRender(); }catch(eU){}
+      var nc={}; s.docs.forEach(function(d){ var x=d.data()||{}; if(x.modelNo) nc[x.modelNo]={id:d.id,x:x}; }); kCache=nc; try{ tyOzetPlan(); }catch(eTy){} try{ urRender(); }catch(eU){} try{ hzKRender(); }catch(eHk){}
       yU=s; if(yonSubs) yonSchedule(); try{ if(window.__lbl) window.__lbl(); }catch(eL){}
       if(scanEl.value) ksearch();
     }, function(e){ kshow('err','Ürün listesi yüklenemedi: '+((e&&(e.code||e.message))||'hata')); });
@@ -2852,6 +2853,22 @@ details.qhelp .notbox{margin-top:8px}
       cartRender();
     } finally { kBusy=false; scanEl.value=''; if(!camStream) scanEl.focus(); }
   }
+
+  // ---------- Kasa: hızlı giriş ürünleri (dokununca sepete) ----------
+  function hzKRender(){
+    var box=$('hzKasa'), inn=$('hzKasaIn'); if(!box||!inn) return;
+    var L=[]; Object.keys(kCache).forEach(function(k){ var x=kCache[k]&&kCache[k].x; if(x&&x.hizli&&x.modelNo) L.push(x); });
+    L.sort(function(a,b){ return String(a.renk||'').localeCompare(String(b.renk||''),'tr'); });
+    if(!L.length){ box.hidden=true; inn.innerHTML=''; return; }
+    var h=L.map(function(x){ var st=Number(x.stoklar&&x.stoklar['Tek'])||0;
+      return '<button type="button" class="chip" data-hzk="'+esc(barkod(x.modelNo,'Tek'))+'" style="flex-direction:column;align-items:flex-start;padding:10px 14px'+(st>0?'':';opacity:.5')+'"><b>'+esc(x.renk||'Ürün')+'</b><small>'+esc(x.fiyat||0)+' ₺ · stok '+st+'</small></button>'; }).join('');
+    if(inn.getAttribute('data-h')!==h){ inn.innerHTML=h; inn.setAttribute('data-h',h); }
+    box.hidden=false;
+  }
+  $('hzKasaIn').addEventListener('click',function(ev){
+    var b=ev.target.closest&&ev.target.closest('[data-hzk]'); if(!b) return;
+    sell(b.getAttribute('data-hzk'));
+  });
 
   // Aynı anda iki satışta stok düşüşü kaybolursa kendini düzeltir
   async function verifyStock(docId,size,sid){
