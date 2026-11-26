@@ -920,7 +920,7 @@ details.qhelp .notbox{margin-top:8px}
     <div class="logo">🍋</div>
     <div>
       <h1>Limon Kasa</h1>
-      <small>Mağaza stok ve satış</small>
+      <small id="hdrSub">Mağaza stok ve satış</small>
     </div>
     <div id="clockBox" style="margin-left:auto;text-align:right;line-height:1.25"><div id="clkDay" style="font-weight:700;font-size:14px"></div><div id="clkDate" style="font-size:12px;color:var(--mute)"></div><div id="clkTime" style="font-weight:800;font-size:20px;font-variant-numeric:tabular-nums"></div></div><div id="whoBox" hidden style="margin-left:12px;text-align:right;font-size:13px;color:var(--mute)"><div id="whoName" style="font-weight:700;color:var(--ink)"></div><button type="button" class="mini" id="logoutBtn" style="margin-top:4px">Çıkış</button></div>
   </header>
@@ -2171,6 +2171,8 @@ details.qhelp .notbox{margin-top:8px}
     $('tabs').innerHTML='';
     $('stat').textContent=docs.length+' ürün · '+adet+' adet';
   }
+  var nwGrp='';
+  function nwGrpOf(x){ return String(x.grup||x.cinsiyet||'Grupsuz').trim()||'Grupsuz'; }
   function render(){
     if(!lastSnap) return;
     renderTabs();
@@ -2181,7 +2183,19 @@ details.qhelp .notbox{margin-top:8px}
       return true;
     });
     if(!docs.length){ listEl.innerHTML='<div class="empty">Bu listede ürün yok.</div>'; return; }
-    listEl.innerHTML = docs.map(itemHtml).join('') +
+    // Grup seçilmemişse: tek tek ürün yerine grup kartları (Bebek, Kız Çocuk...)
+    if(nwGrp && !docs.some(function(d){ return nwGrpOf(d.data()||{})===nwGrp; })) nwGrp='';
+    if(!nwGrp && !editing && !confirmDel){
+      var gc={}, ga={}, go=[];
+      docs.forEach(function(d){ var x=d.data()||{}, g=nwGrpOf(x); if(!(g in gc)){ gc[g]=0; ga[g]=0; go.push(g); } gc[g]++; ga[g]+=totalAdet(x); });
+      var SAB3=['Bebek','Kız Çocuk','Erkek Çocuk','Garson Çocuk','Bayramlık Kız','Bayramlık Erkek'];
+      go.sort(function(a,b){ var ia=SAB3.indexOf(a), ib=SAB3.indexOf(b); if(ia<0) ia=99; if(ib<0) ib=99; return ia!==ib?ia-ib:a.localeCompare(b,'tr'); });
+      listEl.innerHTML='<div class="urgrid">'+go.map(function(g){ return '<button type="button" class="urgt" data-act="nwgrp" data-g="'+esc(g)+'"><b>'+esc(g)+'</b><small>'+gc[g]+' ürün · '+ga[g]+' adet</small></button>'; }).join('')+'</div>' +
+        (lastSnap.docs.length>=limitN ? '<button type="button" class="mini more" data-act="more">Daha eski ürünleri göster</button>' : '');
+      return;
+    }
+    if(nwGrp) docs=docs.filter(function(d){ return nwGrpOf(d.data()||{})===nwGrp; });
+    listEl.innerHTML = (nwGrp?'<button type="button" class="mini" data-act="nwback" style="margin-bottom:8px;width:100%">← Tüm gruplar</button>':'') + docs.map(itemHtml).join('') +
       (lastSnap.docs.length>=limitN ? '<button type="button" class="mini more" data-act="more">Daha eski ürünleri göster</button>' : '');
   }
 
@@ -2282,6 +2296,8 @@ details.qhelp .notbox{margin-top:8px}
     }
     if(act==='tab'){ filter=b.getAttribute('data-v'); render(); return; }
     if(act==='more'){ limitN+=30; subscribe(); return; }
+    if(act==='nwgrp'){ nwGrp=b.getAttribute('data-g')||''; render(); return; }
+    if(act==='nwback'){ nwGrp=''; render(); try{ $('nwList').scrollIntoView(); }catch(e){} return; }
     var itemEl=b.closest('.item');
     var id=itemEl ? itemEl.getAttribute('data-id') : null;
     lhide();
@@ -4625,6 +4641,7 @@ details.qhelp .notbox{margin-top:8px}
   var hedefG=0, hdfTot=0, hdfUn=null;
   function hdfUpd(tot){
     if(typeof tot==='number') hdfTot=tot;
+    try{ var hs=$('hdrSub'); if(hs){ if((cur||isOwner) && hedefG>0){ var hp=Math.max(0,Math.round(hdfTot/hedefG*100)); hs.textContent=hp>=100?'🎉 Günlük hedef tamam!':('🎯 Günlük hedefe %'+(100-hp)+' kaldı'); hs.style.fontWeight='800'; hs.style.color=hp>=100?'#2e9e5b':'var(--ink)'; } else { hs.textContent='Mağaza stok ve satış'; hs.style.fontWeight=''; hs.style.color=''; } } }catch(eHs){}
     var c=$('hdfCard'); if(!c) return;
     if(!kOk() || !(hedefG>0)){ c.hidden=true; return; }
     c.hidden=false;
@@ -4668,7 +4685,7 @@ details.qhelp .notbox{margin-top:8px}
   async function sha(t){ return hex2(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))); }
   function newSalt(){ var a=new Uint8Array(8); crypto.getRandomValues(a); return hex2(a); }
   function curName(){ return cur?cur.ad:''; }
-  function whoUi(){ var b=$('whoBox'); if(cur && !cur.owner){ b.hidden=false; $('whoName').textContent=cur.ad; } else { b.hidden=true; } }
+  function whoUi(){ var b=$('whoBox'); if(cur && !cur.owner){ b.hidden=false; $('whoName').textContent=cur.ad; } else { b.hidden=true; }  try{ hdfUpd(); }catch(eHw){} }
   function loginClose(){ $('loginView').hidden=true; whoUi(); try{ gdTabUpd(); }catch(e){} }
   function loginForm(){ $('loginView').hidden=false; $('loginWait').hidden=true; $('loginForm').hidden=false; setTimeout(function(){ try{ $('lgUser').focus(); }catch(e){} },80); }
   async function authDecide(){
