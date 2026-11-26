@@ -937,11 +937,12 @@ details.qhelp .notbox{margin-top:8px}
     <div id="clockBox" style="margin-left:auto;text-align:right;line-height:1.25"><div id="clkDay" style="font-weight:700;font-size:14px"></div><div id="clkDate" style="font-size:12px;color:var(--mute)"></div><div id="clkTime" style="font-weight:800;font-size:20px;font-variant-numeric:tabular-nums"></div></div><div id="whoBox" hidden style="margin-left:12px;text-align:right;font-size:13px;color:var(--mute)"><div id="whoName" style="font-weight:700;color:var(--ink)"></div><button type="button" class="mini" id="logoutBtn" style="margin-top:4px">Çıkış</button></div>
   </header>
   <script>(function(){function u(){var d=new Date();try{document.getElementById('clkDay').textContent=d.toLocaleDateString('tr-TR',{weekday:'long'});document.getElementById('clkDate').textContent=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});document.getElementById('clkTime').textContent=d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});}catch(e){}}u();setInterval(u,15000);})();</script>
-  <div class="tabs" id="mainTabs" style="margin:0 0 14px"><button type="button" class="tab on" id="tabKasa">🧾 Kasa</button><button type="button" class="tab" id="tabGiris">📦 Ürün girişi</button><button type="button" class="tab" id="tabEtiket">🏷️ Etiket</button><button type="button" class="tab" id="tabSayim">📋 Sayım</button><button type="button" class="tab" id="tabGider" hidden>💸 Gider</button><button type="button" class="tab" id="tabGunSonu" hidden>🧮 Gün sonu</button><button type="button" class="tab" id="tabUrun" hidden>🗂️ Ürünler</button><button type="button" class="tab" id="tabYon" hidden>📊 Yönetim</button></div>
+  <div class="tabs" id="mainTabs" style="margin:0 0 14px"><button type="button" class="tab on" id="tabKasa">🧾 Kasa</button><button type="button" class="tab" id="tabGiris">📦 Ürün girişi</button><button type="button" class="tab" id="tabEtiket">🏷️ Etiket</button><button type="button" class="tab" id="tabSayim">📋 Sayım</button><button type="button" class="tab" id="tabGider" hidden>💸 Gider</button><button type="button" class="tab" id="tabGunSonu" hidden>🧮 Gün sonu</button><button type="button" class="tab" id="tabUrun" hidden>🗂️ Ürünler</button><button type="button" class="tab" id="tabYon" hidden>📊 Yönetim</button><button type="button" class="tab" id="tabTy" hidden>🟠 Trendyol</button></div>
   <div id="navBar"><nav>
     <button type="button" class="ntab on" id="nvKasa"><i>🧾</i>Kasa</button>
     <button type="button" class="ntab" id="nvStok"><i>📦</i>Stok</button>
     <button type="button" class="ntab" id="nvYon" hidden><i>📊</i>Yönetim</button>
+    <button type="button" class="ntab" id="nvTy" hidden><i>🟠</i>Trendyol</button>
   </nav></div>
   <div id="subNav" hidden></div>
   <div id="girisView" hidden>
@@ -1143,11 +1144,8 @@ details.qhelp .notbox{margin-top:8px}
     </div>
     <div class="list" id="urList"></div>
   </div>
-  <div id="yonetimView" hidden>
-    <div id="bakWarn" hidden style="margin:0 0 12px;padding:14px;border-radius:14px;background:var(--err-bg);color:var(--err);border:2px solid var(--err-line);font-weight:700;font-size:16px"></div>
-    <div class="card"><b>Yönetim</b> <small id="yonInfo" style="color:var(--mute)"></small>
-      <button class="btn" id="yonRefresh" type="button" style="margin-top:10px">Yenile</button></div>
-    <div class="card" id="tyCard" style="margin-top:12px"><b>🟠 Trendyol bağlantısı</b> <small class="ftip">(saatte bir otomatik eşitlenir)</small>
+  <div id="trendyolView" hidden>
+    <div class="card" id="tyCard" style="margin-top:0"><b>🟠 Trendyol bağlantısı</b> <small class="ftip">(saatte bir otomatik eşitlenir)</small>
       <div id="tyDurum" class="tip" style="text-align:left;margin:8px 0"></div>
       <button type="button" class="btn" id="tyToggle" style="margin-top:6px">…</button>
       <div id="tyOnay" hidden style="margin-top:10px;padding:12px;border:2px solid var(--ink);border-radius:14px;background:var(--card)"><b id="tyOnayT" style="display:block;font-size:17px"></b><input class="inp" id="tyPin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN (başlangıç: 1234)" style="margin-top:10px"><div class="tip" id="tyPinMsg" style="text-align:left;color:var(--err)"></div><div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="mini main" id="tyEvet">Evet</button><button type="button" class="mini" id="tyHayir">Vazgeç</button></div></div>
@@ -1165,6 +1163,11 @@ details.qhelp .notbox{margin-top:8px}
         <div class="tip" id="tyPinSaveMsg" style="text-align:left"></div>
       </details>
     </div>
+  </div>
+  <div id="yonetimView" hidden>
+    <div id="bakWarn" hidden style="margin:0 0 12px;padding:14px;border-radius:14px;background:var(--err-bg);color:var(--err);border:2px solid var(--err-line);font-weight:700;font-size:16px"></div>
+    <div class="card"><b>Yönetim</b> <small id="yonInfo" style="color:var(--mute)"></small>
+      <button class="btn" id="yonRefresh" type="button" style="margin-top:10px">Yenile</button></div>
     <div class="card" id="tfCard" style="margin-top:12px"><b>💰 Toplu fiyat güncelle</b> <small class="ftip">(sadece yönetici)</small>
       <label class="fl" for="tfFirma">Firma adı (içerir, boş = hepsi)</label><input class="inp" id="tfFirma" type="text" autocomplete="off" placeholder="örn. Şirine">
       <div style="display:flex;gap:8px"><div style="flex:1"><label class="fl" for="tfKat">Kategori</label><select class="inp" id="tfKat"><option value="">Hepsi</option><option>Bebek</option><option>Erkek Çocuk</option><option>Kız Çocuk</option><option>Garson Çocuk</option><option>Bayramlık Kız</option><option>Bayramlık Erkek</option><option>Kapı önü</option></select></div>
@@ -3687,7 +3690,7 @@ details.qhelp .notbox{margin-top:8px}
   async function probeOwner(){
     if(!navigator.onLine && window.limonSupabase && window.limonSupabase.isOwner){ isOwner=true; }
     else try{ await tmo(readOnce(db.collection('alis').limit(1)),10000); isOwner=true; setTimeout(function(){ try{ acodeBackfill(); }catch(eb){} },3000); }catch(e){ isOwner=false; if(probeTry++<3) setTimeout(probeOwner,8000); }
-    $('tabYon').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
+    $('tabYon').hidden=!isOwner; $('tabTy').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
     try{ if(!editing && !confirmDel) render(); }catch(eR){}
     try{ authDecide(); }catch(e5){}
     try{ if(!$('sayimView').hidden){ $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); } }catch(e4){}
@@ -3699,7 +3702,7 @@ details.qhelp .notbox{margin-top:8px}
     [['Bugün','bugun'],['Bu hafta','hafta'],['Bu ay','ay']].forEach(function(r){
       var p=per[r[1]];
       var kp=(p[4]>0)?Math.round(p[2]/p[4]*100):0;
-      h+='<div class="srow" style="justify-content:space-between;flex-wrap:wrap"><b style="width:auto">'+r[0]+'</b><span style="text-align:right">'+p[0]+' adet · ciro '+money(p[1])+' · kâr '+money(p[2])+(p[4]>0?' <b>(%'+kp+')</b>':'')+'<br><small style="color:var(--mute)">🏷 iskonto toplam '+money(p[3])+'</small></span></div>';
+      h+='<div class="srow" style="justify-content:space-between;flex-wrap:wrap"><b style="width:auto">'+r[0]+'</b><span style="text-align:right">'+p[0]+' adet · ciro '+money(p[1])+' · kâr '+money(p[2])+(p[4]>0?' <b>(%'+kp+')</b>':'')+'<br><span style="color:#d62828;font-weight:800;font-size:16px">🏷 İskonto toplam: '+money(p[3])+'</span></span></div>';
     });
     if(eksikSatis) h+='<p class="tip" style="text-align:left;color:var(--err)">'+eksikSatis+' satışın alış fiyatı girilmediği için kâra katılmadı.</p>';
     var catKeys=CINS.filter(function(k){ return yonCat[k]; }).concat(Object.keys(yonCat).filter(function(k){ return CINS.indexOf(k)<0; }));
@@ -5094,6 +5097,7 @@ details.qhelp .notbox{margin-top:8px}
     if(k==='gunsonu' && !(isOwner || (cur && cur.gunsonu))) k='kasa';
     $('gunsonuView').hidden=(k!=='gunsonu'); $('tabGunSonu').classList.toggle('on',k==='gunsonu'); if(k==='gunsonu') gsOpen();
     var kasa=(k==='kasa'), et=(k==='etiket'), yon=(k==='yon'), say=(k==='sayim'); if(!kasa) camStop(); if(!say) syCamStop(); if(k!=='giris') bkCamStop();
+    $('trendyolView').hidden=(k!=='ty'); $('tabTy').classList.toggle('on',k==='ty');
     $('girisView').hidden=(k!=='giris'); $('kasaView').hidden=!kasa; $('etiketView').hidden=!et; $('yonetimView').hidden=!yon; $('giderView').hidden=(k!=='gider'); $('urunView').hidden=(k!=='urun'); $('tabUrun').classList.toggle('on',k==='urun'); if(k==='urun'){ startKasa(); urRender(); } $('tabGider').classList.toggle('on',k==='gider'); if(k==='gider') gdStart(); $('sayimView').hidden=!say;
     $('tabGiris').classList.toggle('on',k==='giris'); $('tabKasa').classList.toggle('on',kasa); $('tabEtiket').classList.toggle('on',et); $('tabYon').classList.toggle('on',yon); $('tabSayim').classList.toggle('on',say);
     if(say){ startKasa(); syRender(); $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); }
@@ -5102,6 +5106,7 @@ details.qhelp .notbox{margin-top:8px}
     if(yon){ yonLoad(); }
   }
   $('tabYon').addEventListener('click',function(){ setTab('yon'); try{ bakWarnUpd(); }catch(e){} try{ tyYonStart(); }catch(e2){} });
+  $('tabTy').addEventListener('click',function(){ if(!isOwner) return; setTab('ty'); try{ tyYonStart(); }catch(e2){} });
   $('tabGider').addEventListener('click',function(){ setTab('gider'); });
   $('tabUrun').addEventListener('click',function(){ setTab('urun'); });
   $('tabSayim').addEventListener('click',function(){ setTab('sayim'); });
@@ -5126,11 +5131,13 @@ details.qhelp .notbox{margin-top:8px}
       var grp='kasa', i;
       for(i=0;i<STOK.length;i++){ if(on(STOK[i])){grp='stok'; lastStok=STOK[i];} }
       for(i=0;i<YON.length;i++){ if(on(YON[i])){grp='yon'; lastYon=YON[i];} }
+      if(on('tabTy')) grp='ty';
       $('nvKasa').classList.toggle('on',grp==='kasa');
       $('nvStok').classList.toggle('on',grp==='stok');
       var yv=!!firstVis(YON);
       $('nvYon').hidden=!yv;
       $('nvYon').classList.toggle('on',grp==='yon');
+      $('nvTy').hidden=!vis('tabTy'); $('nvTy').classList.toggle('on',on('tabTy'));
       var arr=grp==='stok'?STOK:(grp==='yon'?YON:[]), h='', n=0;
       for(i=0;i<arr.length;i++){ if(vis(arr[i])){ n++; h+='<button type="button" class="chip'+(on(arr[i])?' on':'')+'" data-t="'+arr[i]+'">'+$(arr[i]).textContent+'</button>'; } }
       var sn=$('subNav');
@@ -5139,6 +5146,7 @@ details.qhelp .notbox{margin-top:8px}
     $('nvKasa').addEventListener('click',function(){ go('tabKasa'); });
     $('nvStok').addEventListener('click',function(){ go(vis(lastStok)?lastStok:(firstVis(STOK)||'tabGiris')); });
     $('nvYon').addEventListener('click',function(){ go((lastYon&&vis(lastYon))?lastYon:firstVis(YON)); });
+    $('nvTy').addEventListener('click',function(){ go('tabTy'); window.scrollTo(0,0); });
     $('subNav').addEventListener('click',function(ev){
       var b=ev.target.closest?ev.target.closest('.chip'):null; if(!b) return;
       go(b.getAttribute('data-t')); window.scrollTo(0,0);
