@@ -1030,7 +1030,13 @@ details.qhelp .notbox{margin-top:8px}
       </div>
       <button class="btn" id="kcam" type="button" hidden style="background:var(--ink);color:#fff">📷 Kamerayla oku</button>
       <div id="camBox" hidden style="margin:10px 0"><div class="scanwrap"><video id="camVid" playsinline muted style="width:100%;border-radius:14px;background:#000"></video><div class="scanframe"></div><div class="scanline"></div></div><button type="button" class="mini" id="camStop" style="margin-top:8px">Kamerayı kapat</button></div>
-      <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" id="sbBtn">🔍 Stok Bak</button></div>
+      <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" id="sbBtn" style="flex:1">🔍 Stok Bak</button><button type="button" class="mini" id="kMoreBtn" style="flex:1">⚙️ Diğer (İade) ▾</button></div>
+      <details class="kmore" id="kMore"><summary style="display:none">⚙️ Diğer (İade) ▾</summary><div class="kmorein">
+        <button type="button" class="chip" id="fisBtn">🧾 Fiş yazdır: KAPALI (bu cihaz)</button>
+        <button type="button" class="chip" id="iadeBtn">↩ İade al (kapalı)</button>
+        <div class="tip" style="text-align:left;margin:0">İade parası nasıl verilecek?</div>
+        <div id="odeme" style="display:flex;gap:8px"><button type="button" class="chip on" data-pay="nakit">💵 Nakit</button><button type="button" class="chip" data-pay="kart">💳 Kart</button></div>
+      </div></details>
     <div class="card" id="cartCard" hidden style="margin-top:10px">
       <h2 style="margin:0 0 8px">Sepet</h2>
       <div id="cartList"></div>
@@ -1043,12 +1049,6 @@ details.qhelp .notbox{margin-top:8px}
       <button class="btn" id="cartDone" type="button" hidden style="margin-top:0">🔀 Parçalı Sat</button>
       <div style="display:flex;gap:8px;margin-top:10px"><button class="mini" id="cartPark" type="button">⏸ Beklet</button><button class="mini danger" id="cartClr" type="button">Sepeti boşalt</button></div>
     </div>
-      <details class="kmore" id="kMore"><summary>⚙️ Diğer (İade) ▾</summary><div class="kmorein">
-        <button type="button" class="chip" id="fisBtn">🧾 Fiş yazdır: KAPALI (bu cihaz)</button>
-        <button type="button" class="chip" id="iadeBtn">↩ İade al (kapalı)</button>
-        <div class="tip" style="text-align:left;margin:0">İade parası nasıl verilecek?</div>
-        <div id="odeme" style="display:flex;gap:8px"><button type="button" class="chip on" data-pay="nakit">💵 Nakit</button><button type="button" class="chip" data-pay="kart">💳 Kart</button></div>
-      </div></details>
       <button class="btn" id="kgo" type="button" style="margin-top:10px">Sepete ekle</button>
       <div id="hzKasa" hidden style="margin-top:10px"><div class="tip" style="text-align:left;margin:0 0 6px;font-weight:700">⚡ Hızlı ürünler (dokun, sepete eklensin)</div><div id="hzKasaIn" style="display:flex;flex-wrap:wrap;gap:8px"></div></div>
       <div class="tip" id="kpend" style="text-align:left;color:var(--err)"></div>
@@ -2828,6 +2828,8 @@ details.qhelp .notbox{margin-top:8px}
     try{ tyStart(); }catch(eT2){}
     updPend(); flush();
   }
+  // Telefonda (dokunmatik) barkod kutusuna kendiliğinden odaklanma: klavye açılıp ekran yukarı kaymasın. Bilgisayarda okuyucu için odaklanır.
+  function kFocus(){ try{ if(window.matchMedia && window.matchMedia('(pointer:coarse)').matches) return; scanEl.focus(); }catch(e){} }
   async function sell(raw){
     var rs=String(raw).trim();
     if(/[^\d\s]/.test(rs) || (/^\d+$/.test(rs) && rs.length<=4)){ ksearch(); return; }
@@ -2851,7 +2853,7 @@ details.qhelp .notbox{margin-top:8px}
       beep(true);
       kshow('ok','Sepete eklendi ✓ '+ad+' · '+x.fiyat+' ₺ · kalan '+(avail-1));
       cartRender();
-    } finally { kBusy=false; scanEl.value=''; if(!camStream) scanEl.focus(); }
+    } finally { kBusy=false; scanEl.value=''; if(!camStream) kFocus(); }
   }
 
   // ---------- Kasa: hızlı giriş ürünleri (dokununca sepete) ----------
@@ -3035,11 +3037,11 @@ details.qhelp .notbox{margin-top:8px}
   });
   var iadeMode=false;
   function kOk(){ return cur ? !!(cur.owner || cur.gunsonu) : !!isOwner; }
-  function kYetki(){ var ok=kOk(); $('kHead').style.display=ok?'':'none'; $('klist').style.display=ok?'':'none'; try{ hdfUpd(); }catch(eHd){} try{ $('kMore').querySelector('summary').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; var b=$('iadeBtn'); b.textContent=iadeMode?(ok?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(ok?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)'); $('kgo').textContent=iadeMode?(ok?'İadeyi al':'Değişimi al'):'Sepete ekle'; }catch(eY){} }
+  function kYetki(){ var ok=kOk(); $('kHead').style.display=ok?'':'none'; $('klist').style.display=ok?'':'none'; try{ hdfUpd(); }catch(eHd){} try{ $('kMore').querySelector('summary').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; $('kMoreBtn').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; var b=$('iadeBtn'); b.textContent=iadeMode?(ok?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(ok?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)'); $('kgo').textContent=iadeMode?(ok?'İadeyi al':'Değişimi al'):'Sepete ekle'; }catch(eY){} }
   (function(){ var km=$('kMore'); if(!km) return; var busy=false;
     km.addEventListener('toggle',function(){ if(!km.open||busy||kOk()) return; busy=true;
       var v=window.prompt('Yönetici PIN (4 hane):'); if(String(v||'').trim()!=='1414'){ km.open=false; if(v!==null) alert('PIN yanlış.'); }
-      busy=false; }); })();
+      busy=false; }); $('kMoreBtn').addEventListener('click',function(){ km.open=!km.open; }); })();
   function setIade(on){
     iadeMode=on;
     var b=$('iadeBtn'); b.classList.toggle('on',on); b.textContent=on?(kOk()?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(kOk()?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)');
@@ -3230,7 +3232,7 @@ details.qhelp .notbox{margin-top:8px}
   var sbMode=false, sbPass=false, sbCur=null;
   function sbSet(on){
     sbMode=on; var b=$('sbBtn'); b.classList.toggle('main',on); b.textContent=on?'🔍 Stok Bak AÇIK (sepete eklemez) ✓':'🔍 Stok Bak';
-    if(on){ if(iadeMode) setIade(false); kshow('info','Stok Bak açık: okutulan ürün sepete eklenmez, tüm renk ve yaşların stoğu gösterilir.'); try{ scanEl.focus(); }catch(e){} }
+    if(on){ if(iadeMode) setIade(false); kshow('info','Stok Bak açık: okutulan ürün sepete eklenmez, tüm renk ve yaşların stoğu gösterilir.'); try{ kFocus(); }catch(e){} }
     else { $('sbBox').hidden=true; sbCur=null; kmsgEl.className='msg'; }
   }
   $('sbBtn').addEventListener('click',function(){ sbSet(!sbMode); });
@@ -3266,7 +3268,7 @@ details.qhelp .notbox{margin-top:8px}
   }
   $('sbBox').addEventListener('click',function(ev){
     var t0=ev.target; if(!t0 || !t0.closest) return;
-    if(t0.closest('#sbClose')){ $('sbBox').hidden=true; sbCur=null; try{ scanEl.focus(); }catch(e){} return; }
+    if(t0.closest('#sbClose')){ $('sbBox').hidden=true; sbCur=null; try{ kFocus(); }catch(e){} return; }
     if(t0.closest('#sbAdd')){ if(sbCur) sbAddCode(sbCur.code); return; }
     var z=t0.closest('[data-sbadd]'); if(z) sbAddCode(z.getAttribute('data-sbadd'));
   });
@@ -3523,7 +3525,7 @@ details.qhelp .notbox{margin-top:8px}
       beep(true); kRender();
       var geri=(pp[0]&&pp[1])?('💵 '+pp[0]+' ₺ nakit + 💳 '+pp[1]+' ₺ kart'):(pp[1]?('💳 '+pp[1]+' ₺ karta'):('💵 '+pp[0]+' ₺ nakit'));
       kshow('ok','İade alındı ✓ '+(s.cinsiyet||'')+' '+(s.renk||'')+' · '+BD(s.beden||'')+' stoğa +1. Müşteriye geri: '+geri+'. Değişim ise yeni ürünü şimdi okut.'+(fx?'':' (Ürün kartı bulunamadı, stoğu elle kontrol et.)'));
-      try{ scanEl.focus(); }catch(eF){}
+      try{ kFocus(); }catch(eF){}
     }catch(e){ beep(false); kshow('err','İade kaydedilemedi'+(e&&e.code?' ('+e.code+')':'')+'. Tekrar dene.'); }
     finally{ kBusy=false; b.disabled=false; }
   });
@@ -4994,7 +4996,7 @@ details.qhelp .notbox{margin-top:8px}
     $('girisView').hidden=(k!=='giris'); $('kasaView').hidden=!kasa; $('etiketView').hidden=!et; $('yonetimView').hidden=!yon; $('giderView').hidden=(k!=='gider'); $('urunView').hidden=(k!=='urun'); $('tabUrun').classList.toggle('on',k==='urun'); if(k==='urun'){ startKasa(); urRender(); } $('tabGider').classList.toggle('on',k==='gider'); if(k==='gider') gdStart(); $('sayimView').hidden=!say;
     $('tabGiris').classList.toggle('on',k==='giris'); $('tabKasa').classList.toggle('on',kasa); $('tabEtiket').classList.toggle('on',et); $('tabYon').classList.toggle('on',yon); $('tabSayim').classList.toggle('on',say);
     if(say){ startKasa(); syRender(); $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); }
-    if(kasa){ startKasa(); setTimeout(function(){ scanEl.focus(); },60); }
+    if(kasa){ startKasa(); setTimeout(function(){ kFocus(); },60); }
     if(et){ startKasa(); etRender(); }
     if(yon){ yonLoad(); }
   }
