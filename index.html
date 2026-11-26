@@ -839,7 +839,7 @@ details.qhelp .notbox{margin-top:8px}
     <div id="clockBox" style="margin-left:auto;text-align:right;line-height:1.25"><div id="clkDay" style="font-weight:700;font-size:14px"></div><div id="clkDate" style="font-size:12px;color:var(--mute)"></div><div id="clkTime" style="font-weight:800;font-size:20px;font-variant-numeric:tabular-nums"></div></div><div id="whoBox" hidden style="margin-left:12px;text-align:right;font-size:13px;color:var(--mute)"><div id="whoName" style="font-weight:700;color:var(--ink)"></div><button type="button" class="mini" id="logoutBtn" style="margin-top:4px">Çıkış</button></div>
   </header>
   <script>(function(){function u(){var d=new Date();try{document.getElementById('clkDay').textContent=d.toLocaleDateString('tr-TR',{weekday:'long'});document.getElementById('clkDate').textContent=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});document.getElementById('clkTime').textContent=d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});}catch(e){}}u();setInterval(u,15000);})();</script>
-  <div class="tabs" id="mainTabs" style="margin:0 0 14px"><button type="button" class="tab on" id="tabKasa">🧾 Kasa</button><button type="button" class="tab" id="tabGiris">📦 Ürün girişi</button><button type="button" class="tab" id="tabEtiket">🏷️ Etiket</button><button type="button" class="tab" id="tabSayim">📋 Sayım</button><button type="button" class="tab" id="tabGider" hidden>💸 Gider</button><button type="button" class="tab" id="tabUrun" hidden>🗂️ Ürünler</button><button type="button" class="tab" id="tabYon" hidden>📊 Yönetim</button></div>
+  <div class="tabs" id="mainTabs" style="margin:0 0 14px"><button type="button" class="tab on" id="tabKasa">🧾 Kasa</button><button type="button" class="tab" id="tabGiris">📦 Ürün girişi</button><button type="button" class="tab" id="tabEtiket">🏷️ Etiket</button><button type="button" class="tab" id="tabSayim">📋 Sayım</button><button type="button" class="tab" id="tabGider" hidden>💸 Gider</button><button type="button" class="tab" id="tabGunSonu" hidden>🧮 Gün sonu</button><button type="button" class="tab" id="tabUrun" hidden>🗂️ Ürünler</button><button type="button" class="tab" id="tabYon" hidden>📊 Yönetim</button></div>
   <div id="navBar"><nav>
     <button type="button" class="ntab on" id="nvKasa"><i>🧾</i>Kasa</button>
     <button type="button" class="ntab" id="nvStok"><i>📦</i>Stok</button>
@@ -967,10 +967,11 @@ details.qhelp .notbox{margin-top:8px}
       <button class="btn" id="cartDone" type="button" hidden style="margin-top:0">🔀 Parçalı Sat</button>
       <div style="display:flex;gap:8px;margin-top:10px"><button class="mini" id="cartPark" type="button">⏸ Beklet</button><button class="mini danger" id="cartClr" type="button">Sepeti boşalt</button></div>
     </div>
-    <h2>Son satışlar <small id="ktop" style="font-weight:400;color:var(--mute)"></small></h2>
-    <div class="list" id="klist"><div class="empty">Henüz satış yok.</div></div>
-    <button type="button" class="btn" id="gsBtn" hidden style="background:var(--ink);color:#fff">🧮 Gün sonu kasa kapanışı</button>
-    <div class="card" id="gsBox" hidden style="margin-top:12px"><b>🧮 Gün sonu kapanışı</b> <small id="gsDate" style="color:var(--mute)"></small>
+    <h2 id="kHead" style="display:none">Son satışlar <small id="ktop" style="font-weight:400;color:var(--mute)"></small></h2>
+    <div class="list" id="klist" style="display:none"><div class="empty">Henüz satış yok.</div></div>
+  </div>
+  <div id="gunsonuView" hidden>
+    <div class="card" id="gsBox" style="margin-top:0"><b>🧮 Gün sonu kapanışı</b> <small id="gsDate" style="color:var(--mute)"></small>
       <label class="fl" for="gsDevir">Sabah kasada olan para (devir, yoksa boş bırak)</label><input class="inp" id="gsDevir" type="text" inputmode="decimal" autocomplete="off" placeholder="Örn: 500">
       <div id="gsRows" style="margin-top:12px"></div>
       <label class="fl" for="gsSay">Kasada saydığın nakit</label><input class="inp" id="gsSay" type="text" inputmode="decimal" autocomplete="off" placeholder="Örn: 8450">
@@ -2681,7 +2682,7 @@ details.qhelp .notbox{margin-top:8px}
   }
   function startKasa(){
     if(!db) return;
-    if(!kUnsub) kUnsub=db.collection('satislar').orderBy('t','desc').limit(30).onSnapshot(function(s){ kSnap=s; kRender(); }, function(){});
+    if(!kUnsub) kUnsub=db.collection('satislar').orderBy('t','desc').limit(60).onSnapshot(function(s){ kSnap=s; kRender(); }, function(){});
     if(!kCacheUnsub) kCacheUnsub=db.collection('urunler').orderBy('createdAt','desc').onSnapshot(function(s){
       var nc={}; s.docs.forEach(function(d){ var x=d.data()||{}; if(x.modelNo) nc[x.modelNo]={id:d.id,x:x}; }); kCache=nc; try{ tyOzetPlan(); }catch(eTy){} try{ urRender(); }catch(eU){}
       yU=s; if(yonSubs) yonSchedule(); try{ if(window.__lbl) window.__lbl(); }catch(eL){}
@@ -2856,11 +2857,13 @@ details.qhelp .notbox{margin-top:8px}
     }
   });
   var iadeMode=false;
+  function kOk(){ return cur ? !!(cur.owner || cur.gunsonu) : !!isOwner; }
+  function kYetki(){ var ok=kOk(); $('kHead').style.display=ok?'':'none'; $('klist').style.display=ok?'':'none'; try{ $('kMore').querySelector('summary').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; var b=$('iadeBtn'); b.textContent=iadeMode?(ok?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(ok?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)'); $('kgo').textContent=iadeMode?(ok?'İadeyi al':'Değişimi al'):'Sepete ekle'; }catch(eY){} }
   function setIade(on){
     iadeMode=on;
-    var b=$('iadeBtn'); b.classList.toggle('on',on); b.textContent=on?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ İade al (kapalı)';
-    $('kgo').textContent=on?'İadeyi al':'Sepete ekle';
-    if(on) kshow('info','İade modu açık. İade gelen ürünün barkodunu okut ya da adını yazıp bedene dokun. Ödeme tipi: '+payTxt(pay)+' olarak iade edilir.');
+    var b=$('iadeBtn'); b.classList.toggle('on',on); b.textContent=on?(kOk()?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(kOk()?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)');
+    $('kgo').textContent=on?(kOk()?'İadeyi al':'Değişimi al'):'Sepete ekle';
+    if(on) kshow('info',kOk()?('İade modu açık. İade gelen ürünün barkodunu okut ya da adını yazıp bedene dokun. Ödeme tipi: '+payTxt(pay)+' olarak iade edilir.'):'Değişim modu açık. Müşterinin geri getirdiği ürünün barkodunu okut, sonra yeni ürünü normal sat.');
     else kmsgEl.className='msg';
     if(scanEl.value) ksearch();
   }
@@ -2876,7 +2879,7 @@ details.qhelp .notbox{margin-top:8px}
       await tmo(db.doc('satislar/i'+Date.now()+'-'+Math.floor(Math.random()*1000)).set({docId:c.id, modelNo:mn, barkod:code, beden:size, fiyat:-f, renk:x.renk||'', cinsiyet:x.cinsiyet||'', odeme:pay, nakit:(pay==='kart'?0:-f), kart:(pay==='kart'?-f:0), kanal:'magaza', iade:true, esit:false, satan:curName(), t:Date.now()}),8000);
       beep(true);
       setIade(false);
-      kshow('ok','İade alındı ✓ '+ad+' · -'+f+' ₺ · stoğa +1');
+      kshow('ok',kOk()?('İade alındı ✓ '+ad+' · -'+f+' ₺ · stoğa +1'):('Değişim: '+ad+' stoğa +1 ✓ Şimdi yeni ürünü okut ve sat.'));
     }catch(e){ beep(false); kshow('err','İade kaydedilemedi'+(e&&e.code?' ('+e.code+')':'')+'. Tekrar dene.'); }
   }
   var pay='nakit';
@@ -2974,9 +2977,21 @@ details.qhelp .notbox{margin-top:8px}
   function kRender(){
     var d0=new Date(trDay0());
     var tot=0, cnt=0, rows=[], qrows=[], tn=0, tk=0, ids={};
-    function row(s,label,btn){
-      var saat=new Date(s.t).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
-      return '<div class="item"><div class="itop"><div class="meta"><b>'+esc(s.fiyat)+' ₺</b> · '+esc(s.cinsiyet)+' '+esc(s.renk)+' · '+esc(BD(s.beden||s.size))+'<br><span class="tag">'+label+' · '+saat+'</span></div></div>'+btn+'</div>';
+    function row(s,label,btn){ return {k:[s.modelNo||'',s.beden||s.size||'',s.fiyat,label].join('|'), s:s, label:label, btn:btn}; }
+    function hm(t){ return new Date(t).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}); }
+    function grp(arr){
+      var out=[];
+      arr.forEach(function(r){
+        var g=out.length?out[out.length-1]:null, f=Number(r.s.fiyat)||0;
+        if(g && g.k===r.k){ g.n++; g.t0=r.s.t; g.tot=r2(g.tot+f); }
+        else out.push({k:r.k, r:r, n:1, t1:r.s.t, t0:r.s.t, tot:f});
+      });
+      return out;
+    }
+    function gHtml(g){
+      var s=g.r.s, btn=g.r.btn, sa=(g.n>1 && hm(g.t0)!==hm(g.t1))?(hm(g.t0)+'–'+hm(g.t1)):hm(g.t1);
+      if(g.n>1) btn=btn.replace('İade/Değişim</button>','İade/Değişim (1 adet)</button>').replace('Geri al</button>','Geri al (1 adet)</button>');
+      return '<div class="item"><div class="itop"><div class="meta"><b>'+esc(s.fiyat)+' ₺</b>'+(g.n>1?' <b>× '+g.n+' = '+esc(g.tot)+' ₺</b>':'')+' · '+esc(s.cinsiyet)+' '+esc(s.renk)+' · '+esc(BD(s.beden||s.size))+'<br><span class="tag">'+g.r.label+' · '+sa+'</span></div></div>'+btn+'</div>';
     }
     function sum(s){ var f=Number(s.fiyat)||0; tot+=f; cnt+=(s.iade?-1:1); var pp=payParts(s); tn+=pp[0]; tk+=pp[1]; }
     if(kToday) kToday.docs.forEach(function(d){ ids[d.id]=1; var s=d.data()||{}; if(s.t>=d0.getTime()) sum(s); });
@@ -2995,9 +3010,9 @@ details.qhelp .notbox{margin-top:8px}
     rows=qrows.concat(rows);
     kDay={tot:tot,cnt:cnt,tn:r2(tn),tk:r2(tk)};
     $('ktop').textContent='· bugün '+cnt+' adet, '+tot+' ₺ (nakit '+r2(tn)+' · kart '+r2(tk)+')';
-    try{ if(!$('gsBox').hidden) gsRender(); }catch(eG){}
+    try{ if(!$('gunsonuView').hidden) gsRender(); }catch(eG){}
     try{ hdfUpd(tot); }catch(eH){}
-    klistEl.innerHTML=rows.length?rows.join(''):'<div class="empty">Henüz satış yok.</div>';
+    klistEl.innerHTML=rows.length?grp(rows).map(gHtml).join(''):'<div class="empty">Henüz satış yok.</div>';
   }
   klistEl.addEventListener('click', async function(ev){
     var b=ev.target.closest ? ev.target.closest('[data-qid]') : null; if(!b) return;
@@ -3366,14 +3381,14 @@ details.qhelp .notbox{margin-top:8px}
     }catch(e){ gsGider=null; }
     gsBusy=false; gsRender();
   }
-  $('gsBtn').addEventListener('click',function(){
-    var b=$('gsBox'); b.hidden=!b.hidden; if(b.hidden) return;
+  $('tabGunSonu').addEventListener('click',function(){ setTab('gunsonu'); });
+  function gsOpen(){
+    var b=$('gsBox');
     try{ startKasa(); }catch(e){}
     $('gsDate').textContent='('+new Date().toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'})+')';
     try{ $('gsDevir').value=localStorage.getItem(gsKey())||''; }catch(e){}
     $('gsSay').value=''; gsLoad();
-    try{ b.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){}
-  });
+  }
   $('gsDevir').addEventListener('input',function(){ try{ localStorage.setItem(gsKey(),this.value); }catch(e){} gsRender(); });
   $('gsSay').addEventListener('input',gsRender);
   $('gsRef').addEventListener('click',gsLoad);
@@ -4235,7 +4250,7 @@ details.qhelp .notbox{margin-top:8px}
   var gdSel='', gdBusy=false, gdUnsub=null, gdDocs=[];
   function gdCan(){ return !!(isOwner || (cur && cur.gider)); }
   function urCan(){ return !!(isOwner || (cur && cur.urun)); }
-  function gdTabUpd(){ $('tabGider').hidden=!gdCan(); $('tabUrun').hidden=!urCan(); $('gsBtn').hidden=!gdCan(); if(!gdCan()) $('gsBox').hidden=true; }
+  function gdTabUpd(){ $('tabGider').hidden=!gdCan(); $('tabUrun').hidden=!urCan(); var gsOk=!!(isOwner || (cur && cur.gunsonu)); $('tabGunSonu').hidden=!gsOk; if(!gsOk && !$('gunsonuView').hidden){ try{ setTab('kasa'); }catch(eGs){} } try{ kYetki(); }catch(eKy){} }
   function gdMsg(kind,t){ var m=$('gdMsg'); m.className='msg show '+kind; m.textContent=t; }
   function gdChips(){
     $('gdTur').innerHTML=GD_TUR.map(function(r){ var on=(gdSel===r[0]);
@@ -4499,7 +4514,7 @@ details.qhelp .notbox{margin-top:8px}
       try{
         var d=await tmo(db.doc('personel/'+s.u).get(),8000), x=d.exists?d.data():null;
         if(cur) return;
-        if(x && x.aktif!==false && x.h===s.h){ cur={u:s.u,ad:x.ad||s.u,gider:x.gider===true,urun:x.urun===true}; loginClose(); return; }
+        if(x && x.aktif!==false && x.h===s.h){ cur={u:s.u,ad:x.ad||s.u,gider:x.gider===true,urun:x.urun===true,gunsonu:x.gunsonu===true}; loginClose(); return; }
         try{ localStorage.removeItem(SESS_K); }catch(e2){}
       }catch(e){ if(!navigator.onLine && !cur){ cur={u:s.u,ad:s.ad||s.u}; loginClose(); return; } }
     }
@@ -4517,7 +4532,7 @@ details.qhelp .notbox{margin-top:8px}
       var d=await tmo(db.doc('personel/'+u).get(),10000), x=d.exists?d.data():null, ok=false;
       if(x && x.aktif!==false && x.salt && x.h){ ok=((await sha(x.salt+':'+p))===x.h); }
       if(!ok){ lgFail(); return; }
-      cur={u:u,ad:x.ad||u,gider:x.gider===true,urun:x.urun===true};
+      cur={u:u,ad:x.ad||u,gider:x.gider===true,urun:x.urun===true,gunsonu:x.gunsonu===true};
       try{ localStorage.setItem(SESS_K,JSON.stringify({u:u,h:x.h,ad:cur.ad,exp:Date.now()+SESS_MS})); }catch(e2){}
       lgFails=0; $('lgPass').value=''; $('lgMsg').className='msg'; loginClose(); try{ kRender(); }catch(e3){}
     }catch(e){ lgShow('err',navigator.onLine?'Giriş yapılamadı, tekrar dene.':'İnternet yok, giriş yapılamıyor.'); }
@@ -4557,7 +4572,7 @@ details.qhelp .notbox{margin-top:8px}
         '<div class="btns" style="margin-top:8px"><input class="inp" style="flex:2;padding:10px;font-size:16px" type="text" autocomplete="off" autocapitalize="none" placeholder="Yeni şifre" data-pw="'+esc(d.id)+'">'+
         '<button type="button" class="mini main" data-ppw="'+esc(d.id)+'">Şifre değiştir</button>'+
         '<button type="button" class="mini'+(off?'':' danger')+'" data-ptg="'+esc(d.id)+'">'+(off?'Aç':'Kapat')+'</button></div>'+
-        '<div class="btns" style="margin-top:8px"><button type="button" class="mini'+(x.gider===true?' main':'')+'" data-pgd="'+esc(d.id)+'">💸 Gider girebilir: '+(x.gider===true?'EVET':'hayır')+'</button> <button type="button" class="mini'+(x.urun===true?' main':'')+'" data-pur="'+esc(d.id)+'">🗂️ Stok adedi düzeltebilir: '+(x.urun===true?'EVET':'hayır')+'</button></div></div>';
+        '<div class="btns" style="margin-top:8px"><button type="button" class="mini'+(x.gider===true?' main':'')+'" data-pgd="'+esc(d.id)+'">💸 Gider girebilir: '+(x.gider===true?'EVET':'hayır')+'</button> <button type="button" class="mini'+(x.urun===true?' main':'')+'" data-pur="'+esc(d.id)+'">🗂️ Stok adedi düzeltebilir: '+(x.urun===true?'EVET':'hayır')+'</button> <button type="button" class="mini'+(x.gunsonu===true?' main':'')+'" data-pgs="'+esc(d.id)+'">Gün sonu kapatabilir: '+(x.gunsonu===true?'EVET':'hayır')+'</button></div></div>';
     }).join('');
   }
   $('pAddBtn').addEventListener('click',function(){ $('pForm').hidden=!$('pForm').hidden; pMsg(''); });
@@ -4581,8 +4596,8 @@ details.qhelp .notbox{margin-top:8px}
     finally{ this.disabled=false; }
   });
   $('pList').addEventListener('click',async function(ev){
-    var b=ev.target.closest&&ev.target.closest('[data-ppw],[data-ptg],[data-pgd],[data-pur]'); if(!b || !isOwner) return;
-    var idp=b.getAttribute('data-ppw'), idt=b.getAttribute('data-ptg'), idg=b.getAttribute('data-pgd'), idu=b.getAttribute('data-pur');
+    var b=ev.target.closest&&ev.target.closest('[data-ppw],[data-ptg],[data-pgd],[data-pur],[data-pgs]'); if(!b || !isOwner) return;
+    var idp=b.getAttribute('data-ppw'), idt=b.getAttribute('data-ptg'), idg=b.getAttribute('data-pgd'), idu=b.getAttribute('data-pur'), idz=b.getAttribute('data-pgs');
     try{
       if(idp){
         var inp=$('pList').querySelector('[data-pw="'+idp+'"]'), pw=inp?inp.value:'';
@@ -4590,6 +4605,11 @@ details.qhelp .notbox{margin-top:8px}
         var salt=newSalt(), h=await sha(salt+':'+pw);
         await tmo(db.doc('personel/'+idp).update({salt:salt,h:h}),8000);
         pMsg('Şifre değişti ✓ '+idp);
+      } else if(idz){
+        var dz=pDocs.filter(function(z){ return z.id===idz; })[0]; if(!dz) return;
+        var zon=((dz.data()||{}).gunsonu===true);
+        await tmo(db.doc('personel/'+idz).update({gunsonu:!zon}),8000);
+        pMsg(zon?'Gün sonu yetkisi alındı: '+idz:'Gün sonu yetkisi verildi ✓ '+idz);
       } else if(idu){
         var du=pDocs.filter(function(z){ return z.id===idu; })[0]; if(!du) return;
         var uon=((du.data()||{}).urun===true);
@@ -4769,6 +4789,8 @@ details.qhelp .notbox{margin-top:8px}
     syOwnRender();
   });
   function setTab(k){
+    if(k==='gunsonu' && !(isOwner || (cur && cur.gunsonu))) k='kasa';
+    $('gunsonuView').hidden=(k!=='gunsonu'); $('tabGunSonu').classList.toggle('on',k==='gunsonu'); if(k==='gunsonu') gsOpen();
     var kasa=(k==='kasa'), et=(k==='etiket'), yon=(k==='yon'), say=(k==='sayim'); if(!kasa) camStop(); if(!say) syCamStop(); if(k!=='giris') bkCamStop();
     $('girisView').hidden=(k!=='giris'); $('kasaView').hidden=!kasa; $('etiketView').hidden=!et; $('yonetimView').hidden=!yon; $('giderView').hidden=(k!=='gider'); $('urunView').hidden=(k!=='urun'); $('tabUrun').classList.toggle('on',k==='urun'); if(k==='urun'){ startKasa(); urRender(); } $('tabGider').classList.toggle('on',k==='gider'); if(k==='gider') gdStart(); $('sayimView').hidden=!say;
     $('tabGiris').classList.toggle('on',k==='giris'); $('tabKasa').classList.toggle('on',kasa); $('tabEtiket').classList.toggle('on',et); $('tabYon').classList.toggle('on',yon); $('tabSayim').classList.toggle('on',say);
@@ -4792,7 +4814,7 @@ details.qhelp .notbox{margin-top:8px}
 (function(){
   try{
     var $=function(i){return document.getElementById(i)};
-    var STOK=['tabGiris','tabUrun','tabEtiket','tabSayim'], YON=['tabYon','tabGider'];
+    var STOK=['tabGiris','tabUrun','tabEtiket','tabSayim'], YON=['tabYon','tabGider','tabGunSonu'];
     var lastStok='tabGiris', lastYon=null;
     function vis(i){var e=$(i);return !!e && !e.hidden}
     function on(i){var e=$(i);return !!e && e.classList.contains('on')}
