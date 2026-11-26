@@ -941,9 +941,10 @@ details.qhelp .notbox{margin-top:8px}
   </div>
   <div class="card" id="bkCard" hidden>
     <b>📦 Stok ekle</b> <small class="ftip">(ürünü bul, + bas)</small>
-    <button class="btn" id="bkCam" type="button" style="margin:8px 0 10px;background:var(--ink);color:#fff">📷 Kamerayla oku</button>
-    <button class="btn" id="bkRead" type="button" style="margin:0 0 10px;background:var(--lemon);color:var(--on-lemon)">🖼️ Fotoğrafla oku</button><input id="bkReadFile" type="file" accept="image/*" capture="environment" hidden>
-    <button class="btn" id="bkPhoto" type="button" style="margin:0 0 10px;background:var(--lemon);color:var(--on-lemon)">🖼️ Resim çek, benzer ürünü bul</button>
+    <div style="display:flex;gap:8px;margin:8px 0 10px">
+    <button class="btn" id="bkCam" type="button" style="margin:0;flex:1;font-size:15px;padding:12px 6px;background:var(--ink);color:#fff">📷 Kamerayla oku</button>
+    <button class="btn" id="bkPhoto" type="button" style="margin:0;flex:1;font-size:15px;padding:12px 6px;background:var(--lemon);color:var(--on-lemon)">🖼️ Resimden bul</button></div>
+    <input id="bkReadFile" type="file" accept="image/*" capture="environment" hidden>
     <input id="bkFile" type="file" accept="image/*" capture="environment" hidden>
     <div id="bkCamBox" hidden style="margin-bottom:12px"><div class="scanwrap"><video id="bkVid" playsinline muted style="width:100%;border-radius:14px;background:#000"></video><div class="scanframe"></div><div class="scanline"></div></div><button type="button" class="mini" id="bkCamStop" style="margin-top:8px">Kamerayı kapat</button></div>
     <input class="inp" id="bkScan" type="text" inputmode="text" autocomplete="off" placeholder="Barkodu okut, ya da ürünü yaz (örn. Kız Çocuk Lacivert)">
@@ -2109,9 +2110,16 @@ details.qhelp .notbox{margin-top:8px}
     var done = x.durum==='yuklendi';
     var ph = Array.isArray(x.photos) && x.photos.length ? x.photos : [x];
     var imgs = ph.map(function(p){ return '<img src="'+esc(thumbSrc(p))+'" alt="">'; }).join('');
-    var h='<div class="item" data-id="'+esc(id)+'"><div class="itop"><div class="thumbs">'+imgs+'</div>'+
+    var h;
+    if(isOwner){
+      h='<div class="item" data-id="'+esc(id)+'"><div class="itop"><div class="thumbs">'+imgs+'</div>'+
       '<div class="meta"><b>'+esc(x.fiyat)+' ₺</b> · '+(x.cinsiyet?esc(x.cinsiyet)+' · ':'')+esc(stokText(x))+'<br>'+
       esc(x.kumas)+(x.parca?' · '+esc(x.parca):'')+' · '+esc(x.renk)+(x.not!=null ? (x.not?'<br>Not: '+esc(x.not):'') : (x.stok!=null?' · her bedenden '+esc(x.stok)+' adet':''))+'</div></div>';
+    } else {
+      // kasiyer: tek satır özet
+      h='<div class="item" data-id="'+esc(id)+'"><div class="itop"><div class="thumbs">'+imgs+'</div>'+
+      '<div class="meta"><b>'+esc(x.fiyat)+' ₺</b> · '+(x.cinsiyet?esc(x.cinsiyet)+' · ':'')+(x.renk?esc(x.renk)+' · ':'')+esc(stokText(x))+'</div></div>';
+    }
     var dls=ph.map(function(p,i){
       var nm=esc(p.etiket||('Resim '+(i+1)));
       if(p.imageUrl) return '<button type="button" class="mini" data-zoom="'+esc(p.imageUrl)+'" data-zthumb="'+esc(p.thumb||'')+'">🔍 Resmi büyüt: '+nm+'</button>';
@@ -2126,7 +2134,7 @@ details.qhelp .notbox{margin-top:8px}
          '<button type="button" class="mini dangerfill" data-act="delyes"'+(confirmDel.busy?' disabled':'')+'>'+(confirmDel.busy?'Siliniyor…':'Evet, sil')+'</button></div>';
     } else {
       h+='<div class="btns"><button type="button" class="mini" data-act="edit">Düzenle</button>'+
-         '<button type="button" class="mini danger" data-act="del">Sil</button></div>';
+         (isOwner?'<button type="button" class="mini danger" data-act="del">Sil</button>':'')+'</div>';
     }
     h+='</div>';
     return h;
@@ -2426,6 +2434,7 @@ details.qhelp .notbox{margin-top:8px}
       }
     }
     else if(act==='del'){
+      if(!isOwner) return;
       editing=null; confirmDel={id:id, busy:false}; render();
     }
     else if(act==='delno'){ confirmDel=null; render(); }
@@ -3563,6 +3572,7 @@ details.qhelp .notbox{margin-top:8px}
     if(!navigator.onLine && window.limonSupabase && window.limonSupabase.isOwner){ isOwner=true; }
     else try{ await tmo(readOnce(db.collection('alis').limit(1)),10000); isOwner=true; setTimeout(function(){ try{ acodeBackfill(); }catch(eb){} },3000); }catch(e){ isOwner=false; if(probeTry++<3) setTimeout(probeOwner,8000); }
     $('tabYon').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
+    try{ if(!editing && !confirmDel) render(); }catch(eR){}
     try{ authDecide(); }catch(e5){}
     try{ if(!$('sayimView').hidden){ $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); } }catch(e4){}
   }
@@ -4346,7 +4356,6 @@ details.qhelp .notbox{margin-top:8px}
     catch(e){ syMsg('err','Fotoğraf okunamadı, tekrar dene.'); }
     try{ this.value=''; }catch(e2){}
   });
-  $('bkRead').addEventListener('click',function(){ $('bkReadFile').click(); });
   $('bkReadFile').addEventListener('change',async function(){
     var f=this.files&&this.files[0]; if(!f) return; bkMsg('info','Barkod okunuyor…');
     try{ var t=await decodeFileToText(f); if(t) bkGet(t); else { beep(false); bkMsg('err','Barkod okunamadı. Daha yakından, düz ve net çek.'+lastInfo()); } }
