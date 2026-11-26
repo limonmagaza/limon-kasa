@@ -2963,6 +2963,10 @@ details.qhelp .notbox{margin-top:8px}
   var iadeMode=false;
   function kOk(){ return cur ? !!(cur.owner || cur.gunsonu) : !!isOwner; }
   function kYetki(){ var ok=kOk(); $('kHead').style.display=ok?'':'none'; $('klist').style.display=ok?'':'none'; try{ hdfUpd(); }catch(eHd){} try{ $('kMore').querySelector('summary').textContent=ok?'⚙️ Diğer (İade) ▾':'⚙️ Diğer (Değişim) ▾'; var b=$('iadeBtn'); b.textContent=iadeMode?(ok?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(ok?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)'); $('kgo').textContent=iadeMode?(ok?'İadeyi al':'Değişimi al'):'Sepete ekle'; }catch(eY){} }
+  (function(){ var km=$('kMore'); if(!km) return; var busy=false;
+    km.addEventListener('toggle',function(){ if(!km.open||busy||kOk()) return; busy=true;
+      var v=window.prompt('Yönetici PIN (4 hane):'); if(String(v||'').trim()!=='1414'){ km.open=false; if(v!==null) alert('PIN yanlış.'); }
+      busy=false; }); })();
   function setIade(on){
     iadeMode=on;
     var b=$('iadeBtn'); b.classList.toggle('on',on); b.textContent=on?(kOk()?'↩ İADE AÇIK: okutulan ürün stoğa girer':'↩ DEĞİŞİM AÇIK: değişen ürün stoğa girer'):(kOk()?'↩ İade al (kapalı)':'↩ Değişim al (kapalı)');
