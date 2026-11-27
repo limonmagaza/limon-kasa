@@ -1201,6 +1201,7 @@ details.qhelp .notbox{margin-top:8px}
   <div id="yonetimView" hidden>
     <div class="card"><b>Yönetim</b> <small id="yonInfo" style="color:var(--mute)"></small>
       <button class="btn" id="yonRefresh" type="button" style="margin-top:10px">Yenile</button></div>
+    <div class="card" id="cihazCard" style="margin-top:12px;text-align:left"><b>📱 Cihazlar</b> <small style="color:var(--mute)">(her cihazda bekleyen satış var mı)</small><div id="cihazList" style="margin-top:8px"><div class="empty">Yükleniyor…</div></div></div>
     <div class="card" id="hdfSet" style="margin-top:12px"><b>🎯 Günlük hedef</b> <small style="color:var(--mute)">(Kasa ekranında herkes yüzde olarak görür)</small><div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="hdfIn" type="text" inputmode="numeric" placeholder="Günlük hedef ₺ (örn. 50000)"><button type="button" class="mini main" id="hdfSave">Kaydet</button></div><div class="msg" id="hdfMsg"></div></div>
     <div class="card" id="rapCard" style="margin-top:12px">
       <b>Raporlar</b>
@@ -2819,16 +2820,42 @@ details.qhelp .notbox{margin-top:8px}
   // ---------- İnternetsiz satış sırası ----------
   var QK='limonKuyruk', queue=[], kCache={}, kCacheUnsub=null, flushing=false, kToday=null, kTodayUnsub=null;
   try{ queue=JSON.parse(localStorage.getItem(QK)||'[]')||[]; }catch(e){ queue=[]; }
-  function qSave(){ try{ localStorage.setItem(QK,JSON.stringify(queue)); }catch(e){} }
+  // ---- Satış kuyruğu güvenliği ----
+  // Aynı cihazda iki sekme/açılış birbirinin bekleyen satışını silmesin: her kayıtta depodakiyle birleştir.
+  var QDK='limonGonderildi', qDone={}, qSaveOk=true;
+  function qDoneLoad(){ try{ (JSON.parse(localStorage.getItem(QDK)||'[]')||[]).forEach(function(x){ qDone[x]=1; }); }catch(e){} }
+  qDoneLoad();
+  function qDoneAdd(sid){ qDone[sid]=1; try{ var a=Object.keys(qDone); if(a.length>400){ a=a.slice(-300); qDone={}; a.forEach(function(x){ qDone[x]=1; }); } localStorage.setItem(QDK,JSON.stringify(a)); }catch(e){} }
+  function qMerge(){
+    try{
+      qDoneLoad();
+      var st=JSON.parse(localStorage.getItem(QK)||'[]')||[], have={};
+      queue.forEach(function(q){ have[q.sid]=1; });
+      st.forEach(function(q){ if(q && q.sid && !have[q.sid] && !qDone[q.sid]){ queue.push(q); have[q.sid]=1; } });
+      queue=queue.filter(function(q){ return q && !qDone[q.sid]; });
+      queue.sort(function(a,b){ return (Number(a.t)||0)-(Number(b.t)||0); });
+    }catch(e){}
+  }
+  function qSave(){
+    qMerge();
+    var txt=JSON.stringify(queue);
+    try{ localStorage.setItem(QK,txt); qSaveOk=true; return true; }catch(e){}
+    // Yer yoksa önce "Resimden bul" önbelleğini sil, satışı yine yaz
+    try{ localStorage.removeItem('limonDesc1'); localStorage.setItem(QK,txt); qSaveOk=true; return true; }catch(e2){}
+    qSaveOk=false; try{ updPend(); }catch(e3){} return false;
+  }
+  window.addEventListener('storage',function(ev){ if(ev.key===QK || ev.key===QDK){ qMerge(); try{ kRender(); }catch(e){} try{ updPend(); }catch(e2){} } });
   function tmo(p,ms){ return Promise.race([p,new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('zaman asimi')); },ms); })]); }
   var cart=[];
   function pendingCount(mn,size){ return queue.filter(function(q){ return !q.applied && q.mn===mn && q.size===size; }).length + cart.filter(function(it){ return it.mn===mn && it.size===size; }).length; }
   function updPend(){
     var el=$('kpend'); if(!el) return;
     var n=queue.length, off=!navigator.onLine;
+    if(!qSaveOk){ el.style.color='var(--err)'; el.innerHTML='<b>⚠ Satışlar bu cihaza kaydedilemiyor! İnterneti açık tutun, sayfayı KAPATMAYIN.</b>'+(n?' ('+n+' satış bekliyor) <button type="button" class="mini main" id="kflushBtn" style="margin-left:6px">Şimdi gönder</button>':''); return; }
     if(n){
       el.style.color='var(--err)';
-      el.innerHTML='⏳ '+n+' satış kaydedilmeyi bekliyor'+(off?' (internet yok, sayfayı kapatmayın)':'')+(off?'':' <button type="button" class="mini main" id="kflushBtn" style="margin-left:6px">Şimdi gönder</button>');
+      var qe=null; for(var qk=0;qk<queue.length;qk++){ if(queue[qk].err){ qe=queue[qk]; break; } }
+      el.innerHTML='⏳ '+n+' satış kaydedilmeyi bekliyor'+(off?' (internet yok, sayfayı kapatmayın)':'')+(off?'':' <button type="button" class="mini main" id="kflushBtn" style="margin-left:6px">Şimdi gönder</button>')+(qe&&!off?'<br><small>Son hata: '+esc(qe.err)+'</small>':'');
     } else if(off){
       el.style.color='var(--err)'; el.textContent='⚠ İnternet yok: satışlar sırada bekler, sayfayı kapatmayın.';
     } else {
@@ -2931,35 +2958,63 @@ details.qhelp .notbox{margin-top:8px}
   }
   async function flush(){
     if(flushing || !db) return; flushing=true;
+    var tried={}, netErr=false;
     try{
+      qMerge();
       while(queue.length){
-        var q=queue[0], sref=db.doc('satislar/'+q.sid), ex=await tmo(sref.get(),8000);
-        if(!ex.exists){
-          if(!q.applied){
-            var rr=null;
-            try{ rr=await tmo(rpc('stok_dus',{p_id:q.docId,p_size:q.size,p_sid:q.sid}),8000); }
-            catch(er){ if(er&&er.code==='P0002'){ rr={dup:false,n:1,missing:true}; } else if(!(er&&er.rpcMissing)) throw er; }
-            if(rr){ q.applied=true; q.uyari=(!rr.dup && !rr.missing && Number(rr.n)<=0); qSave(); }
-            else {
-            var ref=db.doc('urunler/'+q.docId), fr=await tmo(ref.get(),8000), x=fr.data();
-            if(x && (x.sg||[]).indexOf(q.sid)>=0){ q.applied=true; qSave(); }   // stok daha önce düşülmüş, tekrar düşme
-            else {
-            var st=Object.assign({},(x && x.stoklar)||{}), n=Number(st[q.size]||0);
-            st[q.size]=Math.max(0,n-1);
-            if(x) await tmo(ref.update({stoklar:st, sg:((x.sg||[]).slice(-30)).concat(q.sid)}),8000);
-            q.applied=true; q.uyari=(n<=0); qSave();
-            if(x) verifyStock(q.docId,q.size,q.sid);
+        var q=null; for(var qi=0;qi<queue.length;qi++){ if(!tried[queue[qi].sid]){ q=queue[qi]; break; } }
+        if(!q) break;
+        tried[q.sid]=1;
+        try{
+          var sref=db.doc('satislar/'+q.sid), ex=await tmo(sref.get(),8000);
+          if(!ex.exists){
+            if(!q.applied){
+              var rr=null;
+              try{ rr=await tmo(rpc('stok_dus',{p_id:q.docId,p_size:q.size,p_sid:q.sid}),8000); }
+              catch(er){ if(er&&er.code==='P0002'){ rr={dup:false,n:1,missing:true}; } else if(!(er&&er.rpcMissing)) throw er; }
+              if(rr){ q.applied=true; q.uyari=(!rr.dup && !rr.missing && Number(rr.n)<=0); qSave(); }
+              else {
+              var ref=db.doc('urunler/'+q.docId), fr=await tmo(ref.get(),8000), x=fr.data();
+              if(x && (x.sg||[]).indexOf(q.sid)>=0){ q.applied=true; qSave(); }   // stok daha önce düşülmüş, tekrar düşme
+              else {
+              var st=Object.assign({},(x && x.stoklar)||{}), n=Number(st[q.size]||0);
+              st[q.size]=Math.max(0,n-1);
+              if(x) await tmo(ref.update({stoklar:st, sg:((x.sg||[]).slice(-30)).concat(q.sid)}),8000);
+              q.applied=true; q.uyari=(n<=0); qSave();
+              if(x) verifyStock(q.docId,q.size,q.sid);
+              }
+              }
             }
-            }
+            await tmo(sref.set({docId:q.docId, modelNo:q.mn, barkod:q.code, beden:q.size, fiyat:q.fiyat, liste:(typeof q.liste==='number'?q.liste:q.fiyat), iskonto:(Number(q.iskonto)||0), renk:q.renk, cinsiyet:q.cinsiyet, odeme:q.odeme||'nakit', nakit:(typeof q.nakit==='number'?q.nakit:(q.odeme==='kart'?0:q.fiyat)), kart:(typeof q.kart==='number'?q.kart:(q.odeme==='kart'?q.fiyat:0)), kanal:'magaza', esit:false, uyari:!!q.uyari, satan:(q.satan||''), t:q.t}),8000);
           }
-          await tmo(sref.set({docId:q.docId, modelNo:q.mn, barkod:q.code, beden:q.size, fiyat:q.fiyat, liste:(typeof q.liste==='number'?q.liste:q.fiyat), iskonto:(Number(q.iskonto)||0), renk:q.renk, cinsiyet:q.cinsiyet, odeme:q.odeme||'nakit', nakit:(typeof q.nakit==='number'?q.nakit:(q.odeme==='kart'?0:q.fiyat)), kart:(typeof q.kart==='number'?q.kart:(q.odeme==='kart'?q.fiyat:0)), kanal:'magaza', esit:false, uyari:!!q.uyari, satan:(q.satan||''), t:q.t}),8000);
+          qDoneAdd(q.sid); queue=queue.filter(function(x){ return x.sid!==q.sid; }); qSave(); kRender(); updPend();
+        }catch(e){
+          var ec=String((e&&e.code)||(e&&e.message)||'hata');
+          q.err=ec.slice(0,80); q.tries=(Number(q.tries)||0)+1; qSave();
+          if(!navigator.onLine || /zaman asimi|network|fetch|load failed|failed to fetch/i.test(ec)){ netErr=true; break; } // internet sorunu: sonra tekrar
+          // başka bir hata: bu satışı atla, sıradakileri göndermeye devam et
         }
-        queue.shift(); qSave(); kRender(); updPend();
       }
-    }catch(e){ var ec=String((e&&e.code)||''); if(/permission|invalid|not-found|failed-precondition/.test(ec) && queue.length>1){ var bad=queue.shift(); bad.err=ec; queue.push(bad); qSave(); kshow('err','Bir satış kaydedilemedi ('+ec+'), sıranın sonuna alındı.'); } }
-    finally{ flushing=false; updPend(); }
+    }catch(eF){}
+    finally{ flushing=false; updPend(); try{ heartbeat(true); }catch(eH){} }
   }
   setInterval(function(){ if(queue.length) flush(); },15000);
+  // ---- Cihaz durumu: her cihaz bekleyen satışını sisteme bildirir (yönetici Yönetim'de görür) ----
+  var DEVK='limonCihazId', devId='';
+  try{ devId=localStorage.getItem(DEVK)||''; if(!devId){ devId='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); localStorage.setItem(DEVK,devId); } }catch(eD){ devId='c'+Math.random().toString(36).slice(2,8); }
+  function devName(){ var u=navigator.userAgent||''; return /iPhone/.test(u)?'iPhone':(/iPad/.test(u)?'iPad':(/Android/.test(u)?'Android telefon':(/Windows/.test(u)?'Bilgisayar (Windows)':(/Macintosh/.test(u)?'Mac':'Cihaz')))); }
+  var hbLast=0, hbBusy=false;
+  async function heartbeat(force){
+    if(!db || hbBusy) return; var now=Date.now(); if(!force && now-hbLast<110000) return;
+    hbBusy=true; hbLast=now;
+    try{
+      var er=null; for(var hi=0;hi<queue.length;hi++){ if(queue[hi].err){ er=queue[hi]; break; } }
+      await tmo(db.doc('cihaz/'+devId).set({ad:devName(), kim:(curName()||(isOwner?'Yönetici':'')), bekleyen:queue.length, tutar:r2(queue.reduce(function(a,q){ return a+(Number(q.fiyat)||0); },0)), hata:er?String(er.err).slice(0,80):'', yazilamadi:!qSaveOk, ilk:(queue[0]?Number(queue[0].t)||0:0), t:now}),8000);
+    }catch(eHb){}
+    finally{ hbBusy=false; }
+  }
+  setInterval(function(){ heartbeat(false); },120000);
+  setTimeout(function(){ heartbeat(true); },6000);
   window.addEventListener('online',function(){ updPend(); flush(); });
   $('kpend').addEventListener('click',function(ev){ var b=ev.target.closest&&ev.target.closest('#kflushBtn'); if(!b) return; b.disabled=true; b.textContent='Gönderiliyor…'; Promise.resolve(flush()).then(function(){ updPend(); }); });
   window.addEventListener('offline',updPend);
@@ -3052,8 +3107,9 @@ details.qhelp .notbox{margin-top:8px}
       queue.push({sid:'s'+base+'-'+i+'-'+Math.floor(Math.random()*1000), docId:it.docId, mn:it.mn, size:it.size, code:it.code, fiyat:f, liste:list, iskonto:di, renk:it.renk, cinsiyet:it.cinsiyet, odeme:od, nakit:nk, kart:kt, satan:curName(), t:base+i});
     });
     var msgPay = pay==='parca' ? ('Nakit '+num($('splitN').value)+' ₺ + Kart '+pk+' ₺') : payTxt(pay);
-    var fisItems=cart.slice(); qSave(); cart=[]; $('splitN').value=''; $('splitK').value=''; $('discV').value=''; $('discBox').hidden=true; cartRender(); beep(true);
+    var fisItems=cart.slice(), qOk=qSave(); cart=[]; $('splitN').value=''; $('splitK').value=''; $('discV').value=''; $('discBox').hidden=true; cartRender(); beep(true);
     kshow('ok','Satış tamamlandı ✓ '+n+' parça · '+tot+' ₺'+(disc>0?' (iskonto -'+disc+' ₺)':'')+' · '+msgPay);
+    if(!qOk){ beep(false); kshow('err','⚠ Satış bu cihaza kaydedilemedi! İnterneti açık tutun ve sayfayı KAPATMAYIN, gönderilene kadar bekleyin.'); }
     try{ fisBas(fisItems,tot,disc,pay==='parca'?('Nakit '+nRem0+' / Kart '+pk):(pay==='kart'?'Kart':'Nakit')); }catch(eF){}
     kRender(); updPend(); flush();
   }
@@ -3919,6 +3975,7 @@ details.qhelp .notbox{margin-top:8px}
     }catch(e){ $('yonInfo').textContent='Hesaplanamadı, tekrar dene.'; }
   }
   async function yonLoad(){
+    try{ cihazStart(); }catch(eCz){}
     if(!isOwner) return;
     if(!yonSubs){
       yonSubs=true; $('yonInfo').textContent='Yükleniyor…'; rapStart(); try{ pStart(); }catch(ep){}
@@ -3971,6 +4028,25 @@ details.qhelp .notbox{margin-top:8px}
     try{ await db.doc('alis/'+id).set({v:v}); try{ await db.doc('urunler/'+id).update({acode:pad(Math.round(v),5)}); }catch(eAc){} alisRaw[id]=v; alisMap[id]=v; $('alMsg').textContent='Kaydedildi ✓'; try{ inp.blur(); }catch(eb){} alRender(); yonLoad(); }
     catch(e){ $('alMsg').textContent='Kaydedilemedi, tekrar dene.'; t.disabled=false; }
   });
+  var cihazUn=null, cihazSnap=null;
+  function cihazRender(){
+    var box=$('cihazList'); if(!box) return;
+    var L=cihazSnap?cihazSnap.docs.map(function(d){ var x=d.data()||{}; x.id=d.id; return x; }):[];
+    L.sort(function(a,b){ return (Number(b.bekleyen)||0)-(Number(a.bekleyen)||0) || (Number(b.t)||0)-(Number(a.t)||0); });
+    if(!L.length){ box.innerHTML='<div class="empty">Henüz bildirim yapan cihaz yok. Cihazlar programı açınca burada görünür.</div>'; return; }
+    var now=Date.now();
+    box.innerHTML=L.map(function(x){
+      var dk=Math.round((now-(Number(x.t)||0))/60000), eski=dk>10, bek=Number(x.bekleyen)||0;
+      var son=new Date(Number(x.t)||0).toLocaleString('tr-TR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      var ic=/iPhone|Android|iPad/.test(x.ad||'')?'📱':'💻';
+      var dur=bek>0?'<b style="color:var(--err)">⚠ '+bek+' satış bekliyor ('+esc(x.tutar||0)+' ₺)</b>'+(x.ilk?' · en eskisi '+new Date(x.ilk).toLocaleString('tr-TR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'')+(x.hata?'<br><small>Hata: '+esc(x.hata)+'</small>':'')
+                    :'<b style="color:#2e9e5b">✓ Bekleyen satış yok</b>';
+      if(x.yazilamadi) dur+='<br><b style="color:var(--err)">⚠ Bu cihaz satışları hafızasına yazamıyor!</b>';
+      return '<div style="padding:8px 0;border-top:1px solid var(--line)">'+ic+' <b>'+esc(x.ad||'Cihaz')+'</b> <small>#'+esc(String(x.id).slice(-4))+(x.kim?' · '+esc(x.kim):'')+'</small><br>'+dur+'<br><small style="color:var(--mute)">Son bildirim: '+esc(son)+(eski?' · '+dk+' dk önce (kapalı olabilir)':'')+'</small></div>';
+    }).join('');
+  }
+  function cihazStart(){ if(cihazUn || !db || !isOwner) return; try{ cihazUn=db.collection('cihaz').onSnapshot(function(sn){ cihazSnap=sn; cihazRender(); }, function(){ cihazUn=null; var b=$('cihazList'); if(b) b.innerHTML='<div class="empty">Cihaz bilgisi okunamadı.</div>'; }); }catch(e){ cihazUn=null; } }
+  setInterval(function(){ try{ if(cihazSnap) cihazRender(); }catch(e){} },60000);
   $('yonRefresh').addEventListener('click',function(){
     var b=this; if(b.disabled) return; b.disabled=true; b.textContent='Yenileniyor…';
     try{ yonLoad(); }catch(e){}
@@ -4400,7 +4476,7 @@ details.qhelp .notbox{margin-top:8px}
   // ---------- Resimle benzer ürün bul (ücretsiz, telefonda) ----------
   var DESC_K='limonDesc1', bkDesc={}, bkDescLoaded=false, bkPhotoBusy=false;
   function descLoad(){ if(bkDescLoaded) return; bkDescLoaded=true; try{ var j=JSON.parse(localStorage.getItem(DESC_K)||'{}'); if(j && typeof j==='object') bkDesc=j; }catch(e){ bkDesc={}; } }
-  function descSave(){ try{ var t=JSON.stringify(bkDesc); if(t.length<3500000) localStorage.setItem(DESC_K,t); }catch(e){} }
+  function descSave(){ try{ var t=JSON.stringify(bkDesc); if(t.length<1500000) localStorage.setItem(DESC_K,t); else localStorage.removeItem(DESC_K); }catch(e){} }
   function descOf(im){
     var c=document.createElement('canvas'); c.width=48; c.height=48;
     var g=c.getContext('2d',{willReadFrequently:true});
