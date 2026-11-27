@@ -590,6 +590,13 @@
       (owner ? '<label>Eski verileri aktar (Claude\'dan indirdiğin JSON dosyası)</label><input type="file" id="lsbFile" accept=".json,application/json"><div id="lsbMsg" class="msg"></div>' : '<div id="lsbMsg" class="msg"></div>') +
       '<button class="sec" id="lsbClose">Kapat</button><button class="dng" id="lsbOut">Çıkış yap / bağlantıyı değiştir</button></div>';
     document.body.appendChild(ov);
+    // Yedek (uyarı + Yedek indir) sadece burada, sadece yönetici görür
+    try {
+      var bw = document.getElementById('bakWarn') || root.__bakWarn, bc = document.getElementById('bakCard') || root.__bakCard;
+      root.__bakWarn = bw; root.__bakCard = bc;
+      var bx = ov.querySelector('.box'), cl = ov.querySelector('#lsbClose');
+      if (owner && bx && cl && bc) { if (bw) { bw.style.marginTop = '12px'; bx.insertBefore(bw, cl); } bx.insertBefore(bc, cl); if (root.bakWarnUpd) root.bakWarnUpd(); }
+    } catch (eBk) { }
     ov.querySelector('#lsbClose').addEventListener('click', closeOv);
     ov.querySelector('#lsbOut').addEventListener('click', async function () {
       try { await sb.auth.signOut({scope:'local'}); } catch (e) { }
@@ -1146,6 +1153,7 @@ details.qhelp .notbox{margin-top:8px}
       <button type="button" class="btn" id="tfPrev" style="margin-top:12px;background:var(--ink);color:#fff">Önizle</button>
       <div id="tfRes"></div>
     </details>
+    <details class="card" id="alCard" hidden style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:800;font-size:16px;list-style:none">🧾 Alış fiyatları ▸ <small class="ftip">(sadece yönetici · açmak için dokun)</small></summary><div class="tip" id="alMsg" style="text-align:left;margin:6px 0"></div><div id="alBody"></div></details>
     <div class="card"><b>🗂️ Ürünler</b> <small style="color:var(--mute)">(yetkili kişiler · rakama dokun, adedi yaz)</small>
       <input class="inp" id="urAra" type="text" autocomplete="off" placeholder="Ara: model no, renk, kumaş, ad" style="margin-top:10px">
       <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" id="urOnl">🌐 Sadece Online</button><button type="button" class="mini" id="urCsv">⬇ Online ürünler (Excel)</button></div>
@@ -1180,7 +1188,6 @@ details.qhelp .notbox{margin-top:8px}
     </div>
   </div>
   <div id="yonetimView" hidden>
-    <div id="bakWarn" hidden style="margin:0 0 12px;padding:14px;border-radius:14px;background:var(--err-bg);color:var(--err);border:2px solid var(--err-line);font-weight:700;font-size:16px"></div>
     <div class="card"><b>Yönetim</b> <small id="yonInfo" style="color:var(--mute)"></small>
       <button class="btn" id="yonRefresh" type="button" style="margin-top:10px">Yenile</button></div>
     <div class="card" id="hdfSet" style="margin-top:12px"><b>🎯 Günlük hedef</b> <small style="color:var(--mute)">(Kasa ekranında herkes yüzde olarak görür)</small><div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="hdfIn" type="text" inputmode="numeric" placeholder="Günlük hedef ₺ (örn. 50000)"><button type="button" class="mini main" id="hdfSave">Kaydet</button></div><div class="msg" id="hdfMsg"></div></div>
@@ -1204,10 +1211,13 @@ details.qhelp .notbox{margin-top:8px}
       <div class="tip" id="pMsg" style="text-align:left"></div>
       <div id="pList" class="list" style="margin-top:8px"></div>
     </div>
-    <div class="card" style="margin-top:12px"><b>Yedek</b>
+    <div id="bakHolder" hidden>
+    <div id="bakWarn" hidden style="margin:0 0 12px;padding:14px;border-radius:14px;background:var(--err-bg);color:var(--err);border:2px solid var(--err-line);font-weight:700;font-size:16px"></div>
+    <div class="card" id="bakCard" style="margin-top:12px;text-align:left"><b>Yedek</b>
       <p class="tip" style="text-align:left;margin:4px 0 8px">Ürünler, stok, alış fiyatları ve tüm satışlar Excel (CSV) dosyası olarak telefonuna iner. Ayda bir bas, dosyaları sakla.</p>
       <button type="button" class="btn" id="bakBtn">⬇ Yedek indir (Excel)</button>
       <div class="tip" id="bakMsg" style="text-align:left"></div>
+    </div>
     </div>
   </div>
 </div>
@@ -3662,7 +3672,7 @@ details.qhelp .notbox{margin-top:8px}
 
   // ---------- Yedek hatırlatıcı ----------
   function bakWarnUpd(){
-    var w=$('bakWarn'), last=0;
+    var w=$('bakWarn')||window.__bakWarn, last=0; if(!w) return;
     try{ last=Number(localStorage.getItem('limonSonYedek'))||0; }catch(e){}
     var gun=last?Math.floor((Date.now()-last)/86400000):-1;
     if(last && gun<=15){ w.hidden=true; return; }
@@ -3670,6 +3680,7 @@ details.qhelp .notbox{margin-top:8px}
     w.hidden=false;
   }
   try{ bakWarnUpd(); }catch(e){}
+  window.bakWarnUpd=bakWarnUpd;
   // ---------- Yönetim (sadece sahip) ----------
   var isOwner=false;
   function readOnce(q){ return new Promise(function(res,rej){ var un=null, done=false; un=q.onSnapshot(function(s){ if(done) return; done=true; try{ if(un) un(); }catch(e){} res(s); }, function(e){ if(done) return; done=true; rej(e); }); }); }
@@ -3694,7 +3705,7 @@ details.qhelp .notbox{margin-top:8px}
   async function probeOwner(){
     if(!navigator.onLine && window.limonSupabase && window.limonSupabase.isOwner){ isOwner=true; }
     else try{ await tmo(readOnce(db.collection('alis').limit(1)),10000); isOwner=true; setTimeout(function(){ try{ acodeBackfill(); }catch(eb){} },3000); }catch(e){ isOwner=false; if(probeTry++<3) setTimeout(probeOwner,8000); }
-    $('tabYon').hidden=!isOwner; $('tabTy').hidden=!isOwner; $('tfCard').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
+    $('tabYon').hidden=!isOwner; $('tabTy').hidden=!isOwner; $('tfCard').hidden=!isOwner; $('alCard').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
     try{ if(!editing && !confirmDel) render(); }catch(eR){}
     try{ authDecide(); }catch(e5){}
     try{ if(!$('sayimView').hidden){ $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); } }catch(e4){}
@@ -3714,19 +3725,13 @@ details.qhelp .notbox{margin-top:8px}
     catKeys.forEach(function(k){ var c=yonCat[k];
       h+='<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+esc(k)+': '+c[0]+' adet</b><br><span class="tip" style="text-align:left">maliyet '+money(c[2])+' · satılırsa '+money(c[1])+(c[3]?' · '+c[3]+' ürünün alışı yok':'')+'</span></div>';
     });
-    h+='<div style="padding:10px 0 0"><b>Toplam: '+stok[0]+' adet</b><br><span class="tip" style="text-align:left">maliyet '+money(stok[2])+' · satılırsa '+money(stok[1])+' · beklenen kâr '+money(stok[1]-stok[2])+(stok[3]?' · '+stok[3]+' ürünün alışı yok (kâr eksik hesaplanır)':'')+'</span></div></div>';
-    h+='<h2>Alış fiyatları</h2><div class="tabs" style="margin-bottom:10px"><button type="button" class="tab'+(yonAll?'':' on')+'" data-yon="eksik">Girilmemiş</button><button type="button" class="tab'+(yonAll?' on':'')+'" data-yon="hepsi">Hepsi</button></div><div class="list">';
-    var n=0;
-    yonDocs.forEach(function(d){
-      var x=d.data()||{}, a=alisRaw[d.id];
-      if(!yonAll && a) return;
-      n++;
-      h+='<div class="item"><div class="meta"><b>'+esc(etName(x))+'</b> · satış '+esc(x.fiyat)+' ₺<br>'+esc(stokText(x))+(x.modelNo?' · Model '+pad(x.modelNo,4):'')+'</div>'+
-        '<div class="btns"><input class="inp" style="flex:2;padding:10px;font-size:16px" type="text" inputmode="decimal" placeholder="Alış ₺" value="'+(a?a:'')+'" data-ain="'+esc(d.id)+'"><button type="button" class="mini main" data-aok="'+esc(d.id)+'">Kaydet</button></div></div>';
-    });
-    if(!n) h+='<div class="empty">'+(yonAll?'Ürün yok.':'Hepsinin alış fiyatı girilmiş ✓')+'</div>';
-    h+='</div>';
+    function tr3(a,b,c){ return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-top:1px solid rgba(255,255,255,.18)"><span style="font-size:15px;opacity:.9">'+a+'</span><b style="font-size:'+(c||18)+'px;color:#FFD400">'+b+'</b></div>'; }
+    h+='<div style="margin-top:12px;padding:14px 16px;border-radius:14px;background:#14284b;color:#fff">'+
+      '<div style="font-size:20px;font-weight:800;margin-bottom:6px">📦 Toplam: '+stok[0]+' adet</div>'+
+      tr3('Maliyet',money(stok[2]))+tr3('Satılırsa',money(stok[1]))+tr3('💰 Beklenen kâr',money(stok[1]-stok[2]),22)+
+      (stok[3]?'<div style="font-size:13px;opacity:.85;margin-top:6px">⚠ '+stok[3]+' ürünün alışı yok (kâr eksik hesaplanır)</div>':'')+'</div></div>';
     $('yonBody').innerHTML=h;
+    try{ alRender(); }catch(eAl){}
   }
   var rapPer='gun', rapOff=0, rapPart='ciro', rap={unsubs:[],leaves:{},pending:{},err:false,tmr:null,gen:0};
   function rapRange(){
@@ -3915,6 +3920,39 @@ details.qhelp .notbox{margin-top:8px}
     try{ await db.doc('alis/'+id).set({v:v}); try{ await db.doc('urunler/'+id).update({acode:pad(Math.round(v),5)}); }catch(eAc){} $('yonInfo').textContent='Kaydedildi ✓'; yonLoad(); }
     catch(e){ $('yonInfo').textContent='Kaydedilemedi, tekrar dene.'; t.disabled=false; }
   });
+  // ---- Alış fiyatları (Ürünler ekranında, kategori grupları) ----
+  var alAll=false, alOpenG={};
+  function alGrp(x){ return x.hizli?'Kapı önü':(String(x.cinsiyet||'').trim()||'Diğer'); }
+  function alRender(){
+    var box=$('alBody'); if(!box || !isOwner) return;
+    var ae=document.activeElement; if(ae && ae.tagName==='INPUT' && box.contains(ae)) return;
+    if(!yonDocs || !yonDocs.length){ box.innerHTML='<div class="empty">Yükleniyor…</div>'; return; }
+    var G={}, go=[];
+    yonDocs.forEach(function(d){ var x=d.data()||{}, g=alGrp(x), a=alisRaw[d.id]; if(!G[g]){ G[g]={n:0,eks:0,d:[]}; go.push(g); } G[g].n++; if(!a) G[g].eks++; if(alAll || !a) G[g].d.push(d); });
+    var SAB=['Bebek','Kız Çocuk','Erkek Çocuk','Garson Çocuk','Bayramlık Kız','Bayramlık Erkek','Kapı önü'];
+    go.sort(function(a,b){ var ia=SAB.indexOf(a), ib=SAB.indexOf(b); if(ia<0) ia=99; if(ib<0) ib=99; return ia!==ib?ia-ib:a.localeCompare(b,'tr'); });
+    var h='<div class="tabs" style="margin-bottom:10px"><button type="button" class="tab'+(alAll?'':' on')+'" data-alt="eksik">Girilmemiş</button><button type="button" class="tab'+(alAll?' on':'')+'" data-alt="hepsi">Hepsi</button></div>', n=0;
+    go.forEach(function(g){ var o=G[g]; if(!o.d.length) return; n++; var op=!!alOpenG[g];
+      h+='<div class="item"><div class="itop" data-alg="'+esc(g)+'" style="cursor:pointer"><div class="meta" style="flex:1"><b>'+esc(g)+'</b> · '+o.n+' ürün'+(o.eks?' · <b style="color:var(--err)">'+o.eks+' alışı yok</b>':' · ✓ hepsi girilmiş')+' <b style="float:right;font-size:18px">'+(op?'▾':'▸')+'</b></div></div>';
+      if(op) o.d.forEach(function(d){ var x=d.data()||{}, a=alisRaw[d.id];
+        h+='<div style="padding:8px 0;border-top:1px solid var(--line)"><div class="meta"><b>'+esc(etName(x))+'</b> · satış '+esc(x.fiyat)+' ₺<br><small>'+esc(stokText(x))+(x.modelNo?' · Model '+pad(x.modelNo,4):'')+'</small></div>'+
+          '<div class="btns"><input class="inp" style="flex:2;padding:10px;font-size:16px" type="text" inputmode="decimal" placeholder="Alış ₺" value="'+(a?a:'')+'" data-ain="'+esc(d.id)+'"><button type="button" class="mini main" data-aok="'+esc(d.id)+'">Kaydet</button></div></div>'; });
+      h+='</div>'; });
+    if(!n) h+='<div class="empty">'+(alAll?'Ürün yok.':'Hepsinin alış fiyatı girilmiş ✓')+'</div>';
+    box.innerHTML=h;
+  }
+  $('alCard').addEventListener('toggle',function(){ if(!this.open || !isOwner) return; try{ yonLoad(); }catch(e){} alRender(); });
+  $('alBody').addEventListener('click', async function(ev){
+    var t=ev.target.closest ? ev.target.closest('[data-alt],[data-alg],[data-aok]') : null; if(!t || !isOwner) return;
+    if(t.hasAttribute('data-alt')){ alAll=(t.getAttribute('data-alt')==='hepsi'); alRender(); return; }
+    if(t.hasAttribute('data-alg')){ var g=t.getAttribute('data-alg'); alOpenG[g]=!alOpenG[g]; alRender(); return; }
+    var id=t.getAttribute('data-aok'), inp=$('alBody').querySelector('[data-ain="'+id+'"]');
+    var v=Number(normalizePrice(inp?inp.value:''));
+    if(!(v>0)){ $('alMsg').textContent='Alış fiyatını sayı olarak yaz.'; return; }
+    t.disabled=true;
+    try{ await db.doc('alis/'+id).set({v:v}); try{ await db.doc('urunler/'+id).update({acode:pad(Math.round(v),5)}); }catch(eAc){} alisRaw[id]=v; alisMap[id]=v; $('alMsg').textContent='Kaydedildi ✓'; try{ inp.blur(); }catch(eb){} alRender(); yonLoad(); }
+    catch(e){ $('alMsg').textContent='Kaydedilemedi, tekrar dene.'; t.disabled=false; }
+  });
   $('yonRefresh').addEventListener('click',function(){
     var b=this; if(b.disabled) return; b.disabled=true; b.textContent='Yenileniyor…';
     try{ yonLoad(); }catch(e){}
@@ -4042,9 +4080,9 @@ details.qhelp .notbox{margin-top:8px}
     if(eskiBox) return;
     var yb=$('yonBody'); if(!yb||!yb.parentNode||!db) return;
     eskiBox=document.createElement('details'); eskiBox.id='eskiBox';
-    eskiBox.style.cssText='margin:10px 0;padding:10px 12px;border:2px solid #14213D;border-radius:12px;background:#FFF8D6';
-    eskiBox.innerHTML='<summary style="font-weight:700;font-size:16px;color:#14213D;cursor:pointer">📦 BenimPOS eski veriler (mali özet ve stok)</summary><div id="eskiOut"></div>';
-    yb.parentNode.insertBefore(eskiBox,yb);
+    eskiBox.className='card'; eskiBox.style.cssText='margin-top:12px';
+    eskiBox.innerHTML='<summary style="font-weight:600;font-size:15px;color:var(--mute);cursor:pointer">📦 Geçmiş yıllar · BenimPOS (2022 sonrası) ▸ <small>(açmak için dokun)</small></summary><div id="eskiOut"></div>';
+    var rc=$('rapCard'); if(rc){ eskiBox.style.cssText='margin-top:14px;padding:10px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent'; rc.appendChild(eskiBox); } else { var yv=$('yonetimView'); if(yv) yv.appendChild(eskiBox); else yb.parentNode.insertBefore(eskiBox,yb); }
     eskiBox.addEventListener('click',function(ev){
       var t=ev.target.closest&&ev.target.closest('[data-esk-tab]'); if(!t) return;
       eskiTab=t.getAttribute('data-esk-tab'); eskiDraw();
@@ -4981,7 +5019,7 @@ details.qhelp .notbox{margin-top:8px}
       try{ localStorage.setItem('limonSonYedek',String(Date.now())); }catch(eL){}
       try{ bakWarnUpd(); }catch(eW){}
     }catch(ex){ m.textContent=(ex && ex.code==='declined')?'İndirme iptal edildi.':'Yedek alınamadı, tekrar dene.'; }
-    finally{ bakBusy=false; $('bakBtn').disabled=false; }
+    finally{ bakBusy=false; try{ $('bakBtn').disabled=false; }catch(eB){} }
   });
 
   // --- yönetici: sonuçlar ---
