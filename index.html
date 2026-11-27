@@ -1135,6 +1135,17 @@ details.qhelp .notbox{margin-top:8px}
     <div class="list" id="gdList"></div>
   </div>
   <div id="urunView" hidden>
+    <details class="card" id="tfCard" hidden style="margin:0 0 12px"><summary style="cursor:pointer;font-weight:800;font-size:16px;list-style:none">💰 Toplu fiyat güncelle ▸ <small class="ftip">(sadece yönetici · açmak için dokun)</small></summary>
+      <label class="fl" for="tfFirma">Firma adı (içerir, boş = hepsi)</label><input class="inp" id="tfFirma" type="text" autocomplete="off" placeholder="örn. Şirine">
+      <div style="display:flex;gap:8px"><div style="flex:1"><label class="fl" for="tfKat">Kategori</label><select class="inp" id="tfKat"><option value="">Hepsi</option><option>Bebek</option><option>Erkek Çocuk</option><option>Kız Çocuk</option><option>Garson Çocuk</option><option>Bayramlık Kız</option><option>Bayramlık Erkek</option><option>Kapı önü</option></select></div>
+      <div style="flex:1"><label class="fl" for="tfEski">Şu anki fiyatı (boş = hepsi)</label><input class="inp" id="tfEski" type="text" inputmode="decimal" autocomplete="off" placeholder="örn. 399"></div></div>
+      <label class="fl">Ne yapılsın?</label>
+      <div id="tfOp" style="display:flex;gap:6px"><button type="button" class="chip on" data-tf="sabit" style="flex:1;font-size:14px;padding:10px 4px">Sabit fiyat ₺</button><button type="button" class="chip" data-tf="tutar" style="flex:1;font-size:14px;padding:10px 4px">± ₺ ekle</button><button type="button" class="chip" data-tf="yuzde" style="flex:1;font-size:14px;padding:10px 4px">± % uygula</button></div>
+      <input class="inp" id="tfVal" type="text" inputmode="decimal" autocomplete="off" placeholder="Yeni fiyat (örn. 449)" style="margin-top:8px">
+      <label style="display:flex;align-items:center;gap:10px;margin-top:10px;font-weight:600"><input type="checkbox" id="tf99" style="width:22px;height:22px"> 99'lu rakama yuvarla (yukarı)</label>
+      <button type="button" class="btn" id="tfPrev" style="margin-top:12px;background:var(--ink);color:#fff">Önizle</button>
+      <div id="tfRes"></div>
+    </details>
     <div class="card"><b>🗂️ Ürünler</b> <small style="color:var(--mute)">(yetkili kişiler · rakama dokun, adedi yaz)</small>
       <input class="inp" id="urAra" type="text" autocomplete="off" placeholder="Ara: model no, renk, kumaş, ad" style="margin-top:10px">
       <div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="mini" id="urOnl">🌐 Sadece Online</button><button type="button" class="mini" id="urCsv">⬇ Online ürünler (Excel)</button></div>
@@ -1172,17 +1183,6 @@ details.qhelp .notbox{margin-top:8px}
     <div id="bakWarn" hidden style="margin:0 0 12px;padding:14px;border-radius:14px;background:var(--err-bg);color:var(--err);border:2px solid var(--err-line);font-weight:700;font-size:16px"></div>
     <div class="card"><b>Yönetim</b> <small id="yonInfo" style="color:var(--mute)"></small>
       <button class="btn" id="yonRefresh" type="button" style="margin-top:10px">Yenile</button></div>
-    <div class="card" id="tfCard" style="margin-top:12px"><b>💰 Toplu fiyat güncelle</b> <small class="ftip">(sadece yönetici)</small>
-      <label class="fl" for="tfFirma">Firma adı (içerir, boş = hepsi)</label><input class="inp" id="tfFirma" type="text" autocomplete="off" placeholder="örn. Şirine">
-      <div style="display:flex;gap:8px"><div style="flex:1"><label class="fl" for="tfKat">Kategori</label><select class="inp" id="tfKat"><option value="">Hepsi</option><option>Bebek</option><option>Erkek Çocuk</option><option>Kız Çocuk</option><option>Garson Çocuk</option><option>Bayramlık Kız</option><option>Bayramlık Erkek</option><option>Kapı önü</option></select></div>
-      <div style="flex:1"><label class="fl" for="tfEski">Şu anki fiyatı (boş = hepsi)</label><input class="inp" id="tfEski" type="text" inputmode="decimal" autocomplete="off" placeholder="örn. 399"></div></div>
-      <label class="fl">Ne yapılsın?</label>
-      <div id="tfOp" style="display:flex;gap:6px"><button type="button" class="chip on" data-tf="sabit" style="flex:1;font-size:14px;padding:10px 4px">Sabit fiyat ₺</button><button type="button" class="chip" data-tf="tutar" style="flex:1;font-size:14px;padding:10px 4px">± ₺ ekle</button><button type="button" class="chip" data-tf="yuzde" style="flex:1;font-size:14px;padding:10px 4px">± % uygula</button></div>
-      <input class="inp" id="tfVal" type="text" inputmode="decimal" autocomplete="off" placeholder="Yeni fiyat (örn. 449)" style="margin-top:8px">
-      <label style="display:flex;align-items:center;gap:10px;margin-top:10px;font-weight:600"><input type="checkbox" id="tf99" style="width:22px;height:22px"> 99'lu rakama yuvarla (yukarı)</label>
-      <button type="button" class="btn" id="tfPrev" style="margin-top:12px;background:var(--ink);color:#fff">Önizle</button>
-      <div id="tfRes"></div>
-    </div>
     <div class="card" id="hdfSet" style="margin-top:12px"><b>🎯 Günlük hedef</b> <small style="color:var(--mute)">(Kasa ekranında herkes yüzde olarak görür)</small><div style="display:flex;gap:8px;margin-top:8px"><input class="inp" id="hdfIn" type="text" inputmode="numeric" placeholder="Günlük hedef ₺ (örn. 50000)"><button type="button" class="mini main" id="hdfSave">Kaydet</button></div><div class="msg" id="hdfMsg"></div></div>
     <div class="card" id="rapCard" style="margin-top:12px">
       <b>Raporlar</b>
@@ -3694,7 +3694,7 @@ details.qhelp .notbox{margin-top:8px}
   async function probeOwner(){
     if(!navigator.onLine && window.limonSupabase && window.limonSupabase.isOwner){ isOwner=true; }
     else try{ await tmo(readOnce(db.collection('alis').limit(1)),10000); isOwner=true; setTimeout(function(){ try{ acodeBackfill(); }catch(eb){} },3000); }catch(e){ isOwner=false; if(probeTry++<3) setTimeout(probeOwner,8000); }
-    $('tabYon').hidden=!isOwner; $('tabTy').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
+    $('tabYon').hidden=!isOwner; $('tabTy').hidden=!isOwner; $('tfCard').hidden=!isOwner; $('alisWrap').hidden=!isOwner; $('hzAlis').hidden=!isOwner; try{ gdTabUpd(); }catch(eg){} try{ kRender(); }catch(e3){}
     try{ if(!editing && !confirmDel) render(); }catch(eR){}
     try{ authDecide(); }catch(e5){}
     try{ if(!$('sayimView').hidden){ $('syOwner').hidden=!isOwner; if(isOwner) syOwnerStart(); } }catch(e4){}
