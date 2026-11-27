@@ -346,13 +346,22 @@
     function ensureRealtime() {
       if (chan) return;
       try {
-        chan = sb.channel('limon-kv-' + Math.random().toString(36).slice(2, 7))
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'kv' }, onChange)
+        var me = sb.channel('limon-kv-' + Math.random().toString(36).slice(2, 7));
+        chan = me;
+        me.on('postgres_changes', { event: '*', schema: 'public', table: 'kv' }, onChange)
           .subscribe(function (status) {
+            if (chan !== me) return; // eski kanaldan gelen haber: yok say
             if (status === 'SUBSCRIBED') { if (rtSeen) resync(); rtSeen = true; }
+            // Canlı bağlantı koptuysa (uzun süre açık kalan kasa bilgisayarı): kapat, birkaç saniye sonra yeniden bağlan ve verileri tazele
+            else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              var c0 = chan; chan = null; try { if (c0) sb.removeChannel(c0); } catch (e1) { }
+              setTimeout(function () { if (!chan && listeners.length) { ensureRealtime(); resync(); } }, 5000);
+            }
           });
       } catch (e) { chan = null; }
     }
+    // Emniyet: canlı bağlantı sessizce dursa bile ekran en geç 2 dakikada bir tazelenir
+    setInterval(function () { try { if (!document.hidden && listeners.length) { if (!chan) ensureRealtime(); resync(); } } catch (e) { } }, 120000);
     var rsT = null;
     function resync() {
       clearTimeout(rsT);
