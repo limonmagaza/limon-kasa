@@ -630,7 +630,11 @@
     if (document.getElementById('lsbGear')) return;
     css();
     var b = document.createElement('button'); b.id = 'lsbGear'; b.type = 'button'; b.title = 'Bağlantı ayarları'; b.textContent = '⚙';
-    b.addEventListener('click', showSettings); document.body.appendChild(b);
+    b.addEventListener('click', showSettings);
+    // Üstte, başlığın sağında görünür olsun (alt bardaki Kasa düğmesinin üstüne binmesin)
+    var hd = document.querySelector('.wrap > header') || document.querySelector('header');
+    if (hd) { b.style.cssText = 'position:static;opacity:1;flex:none;width:44px;height:44px;margin-left:10px;border-radius:12px;border:1.5px solid #d3dae9;background:#fff;color:#14284b;font-size:22px;line-height:40px;text-align:center;cursor:pointer;padding:0;align-self:center'; hd.appendChild(b); }
+    else document.body.appendChild(b);
   }
 
   function boot() {
@@ -3911,7 +3915,12 @@ details.qhelp .notbox{margin-top:8px}
     try{ await db.doc('alis/'+id).set({v:v}); try{ await db.doc('urunler/'+id).update({acode:pad(Math.round(v),5)}); }catch(eAc){} $('yonInfo').textContent='Kaydedildi ✓'; yonLoad(); }
     catch(e){ $('yonInfo').textContent='Kaydedilemedi, tekrar dene.'; t.disabled=false; }
   });
-  $('yonRefresh').addEventListener('click',yonLoad);
+  $('yonRefresh').addEventListener('click',function(){
+    var b=this; if(b.disabled) return; b.disabled=true; b.textContent='Yenileniyor…';
+    try{ yonLoad(); }catch(e){}
+    setTimeout(function(){ b.textContent='✓ Rakamlar güncellendi'; b.style.background='#2e9e5b'; b.style.color='#fff';
+      setTimeout(function(){ b.textContent='Yenile'; b.style.background=''; b.style.color=''; b.disabled=false; },1600); },700);
+  });
 
   // ---- BenimPOS eski veriler (sadece sahip, salt okunur) ----
   var eskiBox=null, eskiData=null, eskiDays=null, eskiTab='ciro', eskiY=null, eskiM=null;
