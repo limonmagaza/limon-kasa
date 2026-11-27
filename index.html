@@ -537,6 +537,7 @@
       '#lsbOv .row{display:flex;align-items:center;gap:10px;margin:14px 0 0;font-size:14px}#lsbOv .row input{width:22px;height:22px}' +
       '#lsbOv button{width:100%;margin-top:16px;font-size:18px;font-weight:700;padding:15px;border:0;border-radius:14px;background:#ffd400;color:#14284b;font-family:inherit;cursor:pointer}' +
       '#lsbOv button.sec{background:#fff;border:1.5px solid #d3dae9;font-size:16px}#lsbOv button.dng{background:#fff;border:1.5px solid #f0c4be;color:#c0392b;font-size:16px}' +
+      '#lsbOv .mini{width:auto;margin-top:0;font-size:15px;padding:10px 14px;background:#fff;border:1.5px solid #d3dae9}#lsbOv #eskiBox summary{font-size:16px!important;color:#14284b!important;font-weight:700!important}' +
       '#lsbOv button[disabled]{opacity:.55}#lsbOv .msg{margin-top:14px;padding:12px;border-radius:12px;font-size:15px;display:none}#lsbOv .msg.on{display:block}' +
       '#lsbOv .err{background:#fdecea;color:#c0392b}#lsbOv .ok{background:#e8f6ee;color:#1f8a4c}#lsbOv .inf{background:#e3e9f6;color:#14284b}' +
       '#lsbGear{position:fixed;left:8px;bottom:8px;z-index:2147482000;width:30px;height:30px;border-radius:15px;border:1px solid #d3dae9;background:#fff;color:#14284b;font-size:16px;line-height:28px;text-align:center;opacity:.45;cursor:pointer;padding:0}' +
@@ -596,6 +597,7 @@
       root.__bakWarn = bw; root.__bakCard = bc;
       var bx = ov.querySelector('.box'), cl = ov.querySelector('#lsbClose');
       if (owner && bx && cl && bc) { if (bw) { bw.style.marginTop = '12px'; bx.insertBefore(bw, cl); } bx.insertBefore(bc, cl); if (root.bakWarnUpd) root.bakWarnUpd(); }
+      if (owner && bx && cl) { if (!document.getElementById('eskiBox') && !root.__eskiBox && root.__eskiRender) root.__eskiRender(); var eb = document.getElementById('eskiBox') || root.__eskiBox; if (eb) { root.__eskiBox = eb; bx.insertBefore(eb, cl); } }
     } catch (eBk) { }
     ov.querySelector('#lsbClose').addEventListener('click', closeOv);
     ov.querySelector('#lsbOut').addEventListener('click', async function () {
@@ -3889,7 +3891,14 @@ details.qhelp .notbox{margin-top:8px}
       yonRender(per,st,eksikS);
       var kl=[];
       yS.docs.forEach(function(d){ var x=d.data()||{}; if(x.iade) kl.push({t:x.t,col:'satislar',id:d.id,txt:'↩ İade · '+(x.cinsiyet||'')+' '+(x.renk||'')+' · '+BD(x.beden||'')+' · '+Math.abs(Number(x.fiyat)||0)+' ₺'}); });
-      if(yK) yK.docs.forEach(function(d){ var x=d.data()||{}; kl.push({t:x.t,col:'kayit',id:d.id,txt:(x.tur==='sayim_duzelt'?('📋 Sayımla stok düzeltildi · '+(x.n||0)+' kalem · eksik '+(x.eksik||0)+' · fazla '+(x.fazla||0)):('⛔ Satış geri alındı · '+BD(x.beden||'')+' · '+(Number(x.fiyat)||0)+' ₺'))}); });
+      if(yK) yK.docs.forEach(function(d){ var x=d.data()||{}, tx='';
+        if(x.tur==='gun_sonu' || d.id==='gunsonu') return; // gün sonu kaydı burada gösterilmez (silinirse liste temizliği bozulur)
+        if(x.tur==='sayim_duzelt') tx='📋 Sayımla stok düzeltildi · '+(x.n||0)+' kalem · eksik '+(x.eksik||0)+' · fazla '+(x.fazla||0);
+        else if(x.tur==='iade_iptal') tx='↩ İade iptal edildi · '+BD(x.beden||'')+' · '+Math.abs(Number(x.fiyat)||0)+' ₺';
+        else if(x.tur==='toplu_fiyat') tx='💰 Toplu fiyat güncellendi · '+(x.adet||0)+' ürün';
+        else if(x.tur==='geri_al' || !x.tur) tx='⛔ Satış geri alındı · '+BD(x.beden||'')+' · '+(Number(x.fiyat)||0)+' ₺';
+        else return;
+        kl.push({t:x.t,col:'kayit',id:d.id,txt:tx}); });
       kl.sort(function(a,b){ return (b.t||0)-(a.t||0); });
       var kh='<h2>İade ve geri alma kayıtları</h2>'+(kl.length?'<div class="itop" style="margin:6px 0;align-items:center"><label style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="checkbox" id="kAll" style="width:22px;height:22px"> Tümünü seç</label><button type="button" class="mini danger" id="kSel" disabled>Seçilenleri sil</button></div>':'')+'<div class="list">'+(kl.length?kl.slice(0,30).map(function(k){
         return '<div class="item"><div class="itop"><label style="display:flex;align-items:center;padding:0 8px"><input type="checkbox" class="kchk" data-kk="'+esc(k.col)+'|'+esc(k.id)+'" style="width:22px;height:22px"></label><div class="meta">'+esc(k.txt)+'<br><span class="tag">'+(k.t?new Date(k.t).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'')+'</span></div><button type="button" class="mini danger" data-kdel="'+esc(k.col)+'|'+esc(k.id)+'">Sil</button></div></div>';
@@ -4076,13 +4085,15 @@ details.qhelp .notbox{margin-top:8px}
     }
     out.innerHTML=h;
   }
+  window.__eskiRender=function(){ try{ eskiRender(); }catch(e){} };
   function eskiRender(){
     if(eskiBox) return;
     var yb=$('yonBody'); if(!yb||!yb.parentNode||!db) return;
     eskiBox=document.createElement('details'); eskiBox.id='eskiBox';
     eskiBox.className='card'; eskiBox.style.cssText='margin-top:12px';
     eskiBox.innerHTML='<summary style="font-weight:600;font-size:15px;color:var(--mute);cursor:pointer">📦 Geçmiş yıllar · BenimPOS (2022 sonrası) ▸ <small>(açmak için dokun)</small></summary><div id="eskiOut"></div>';
-    var rc=$('rapCard'); if(rc){ eskiBox.style.cssText='margin-top:14px;padding:10px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent'; rc.appendChild(eskiBox); } else { var yv=$('yonetimView'); if(yv) yv.appendChild(eskiBox); else yb.parentNode.insertBefore(eskiBox,yb); }
+    // Sadece ⚙ Ayarlar penceresinde gösterilir (yönetici); o zamana kadar gizli kutuda bekler
+    eskiBox.style.cssText='margin-top:12px;text-align:left'; window.__eskiBox=eskiBox; var hb=$('bakHolder'); if(hb) hb.appendChild(eskiBox); else yb.parentNode.insertBefore(eskiBox,yb);
     eskiBox.addEventListener('click',function(ev){
       var t=ev.target.closest&&ev.target.closest('[data-esk-tab]'); if(!t) return;
       eskiTab=t.getAttribute('data-esk-tab'); eskiDraw();
